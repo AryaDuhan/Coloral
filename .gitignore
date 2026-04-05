@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

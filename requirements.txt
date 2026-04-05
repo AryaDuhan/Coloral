@@ -1,0 +1,10 @@
+# Core
+discord.py>=2.4.0
+python-dotenv>=1.0.0
+
+# Database
+aiosqlite>=0.20.0
+
+# Graph generation
+matplotlib>=3.9.0
+numpy>=1.26.0
