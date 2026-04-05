@@ -163,3 +163,20 @@ class Database:
         ) as cur:
             row = await cur.fetchone()
         return row[0] if row else None
+
+    async def get_all_time_leaderboard(self, limit: int = 10):
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(
+            """SELECT username, ROUND(SUM(score), 2) as total_score, MAX(score) as pb 
+               FROM scores 
+               GROUP BY user_id 
+               HAVING COUNT(*) > 0 
+               ORDER BY total_score DESC LIMIT ?""",
+            (limit,),
+        ) as cur:
+            return await cur.fetchall()
+
+    async def get_all_players(self) -> list[str]:
+        async with self.db.execute("SELECT DISTINCT user_id FROM scores") as cur:
+            rows = await cur.fetchall()
+        return [r[0] for r in rows]

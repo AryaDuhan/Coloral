@@ -147,6 +147,9 @@ class ReminderCog(commands.Cog, name="Reminder"):
             text=f"Daily reminder  •  {datetime.now(timezone.utc).strftime('%B %d, %Y')}"
         )
 
+        players = await self.bot.db.get_all_players()
+        mention_str = " ".join(f"<@{p}>" for p in players)
+
         for ch_id in channel_ids:
             channel = self.bot.get_channel(ch_id)
             if channel is None:
@@ -156,7 +159,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
                 )
                 continue
             try:
-                await channel.send(embed=embed, view=PlayView())
+                # Send the mentions string as the message content, so Discord pings them
+                await channel.send(content=mention_str[:2000], embed=embed, view=PlayView())
                 log.info(f"Daily reminder posted to channel {ch_id}")
             except discord.Forbidden:
                 log.error(f"Missing permissions to send to channel {ch_id}")

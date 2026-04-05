@@ -18,8 +18,17 @@ class StatsCog(commands.Cog, name="Stats"):
     @app_commands.command(name="stats", description="View your Dialed daily stats.")
     @app_commands.describe(player="Look up another player (defaults to you).")
     async def stats(self, interaction: discord.Interaction, player: discord.Member | None = None):
-        await interaction.response.defer()
         target = player or interaction.user
+        
+        if target.bot:
+            embed = discord.Embed(
+                title="❌ Invalid Player",
+                description="Bots don't play Dialed.gg!",
+                color=COLOR_WARNING,
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        await interaction.response.defer()
         db = self.bot.db
 
         s = await db.get_user_stats(str(target.id))

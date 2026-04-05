@@ -13,25 +13,22 @@ log = logging.getLogger("dialed.leaderboard")
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 
-class LeaderboardCog(commands.Cog, name="Leaderboard"):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+class LeaderboardView(discord.ui.View):
+    def __init__(self, db, uid: str, game: int):
+        super().__init__(timeout=180)
+        self.db = db
+        self.uid = uid
+        self.game = game
+        self.mode = "daily"
 
-    @app_commands.command(name="leaderboard", description="Show today's daily leaderboard.")
-    async def leaderboard(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        db = self.bot.db
-        game = int(date.today().strftime("%Y%m%d"))
-
-        rows = await db.get_leaderboard(game, limit=10)
+    async def get_daily_embed(self) -> discord.Embed:
+        rows = await self.db.get_leaderboard(self.game, limit=10)
         if not rows:
-            embed = discord.Embed(
+            return discord.Embed(
                 title="📅 Daily Leaderboard",
                 description="No daily scores yet today.\nShare your result from **dialed.gg** here! 🎨",
                 color=COLOR_WARNING,
             )
-            await interaction.followup.send(embed=embed)
-            return
 
         lines = []
         for i, row in enumerate(rows, start=1):
@@ -47,15 +44,70 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
             color=COLOR_PRIMARY,
         )
 
-        uid = str(interaction.user.id)
-        user_rank = await db.get_user_rank(uid, game)
-        user_score = await db.get_existing_score(uid, game)
+        user_rank = await self.db.get_user_rank(self.uid, self.game)
+        user_score = await self.db.get_existing_score(self.uid, self.game)
         if user_score is not None and user_rank is not None:
             embed.set_footer(text=f"You are #{user_rank} with {user_score}/50")
         else:
             embed.set_footer(text="Submit your score by sharing your daily result!")
         embed.timestamp = discord.utils.utcnow()
-        await interaction.followup.send(embed=embed)
+        return embed
+
+    async def get_all_time_embed(self) -> discord.Embed:
+        rows = await self.db.get_all_time_leaderboard(limit=10)
+        if not rows:
+            return discord.Embed(
+                title="🏆 All-Time Leaderboard",
+                description="No scores recorded yet.",
+                color=COLOR_WARNING,
+            )
+
+        lines = []
+        for i, row in enumerate(rows, start=1):
+            medal = MEDALS.get(i, f"**{i}.**")
+            username = discord.utils.escape_markdown(row["username"])
+            total = row["total_score"]
+            pb = row["pb"]
+            lines.append(f"{medal} **{username}** — **Cumul**: `{total}` (PB: `{pb}/50`)")
+
+        embed = discord.Embed(
+            title="🏆 All-Time Leaderboard",
+            description="\n".join(lines),
+            color=COLOR_PRIMARY,
+        )
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    async def update_view(self, interaction: discord.Interaction):
+        if self.mode == "daily":
+            embed = await self.get_daily_embed()
+        else:
+            embed = await self.get_all_time_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary, custom_id="lb_prev")
+    async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.mode = "all_time" if self.mode == "daily" else "daily"
+        await self.update_view(interaction)
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary, custom_id="lb_next")
+    async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.mode = "all_time" if self.mode == "daily" else "daily"
+        await self.update_view(interaction)
+
+
+class LeaderboardCog(commands.Cog, name="Leaderboard"):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @app_commands.command(name="leaderboard", description="Show the Dialed leaderboards (Daily / All-Time).")
+    async def leaderboard(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        game = int(date.today().strftime("%Y%m%d"))
+        
+        view = LeaderboardView(self.bot.db, str(interaction.user.id), game)
+        embed = await view.get_daily_embed()
+        await interaction.followup.send(embed=embed, view=view)
 
 
 def _mini_bar(score: float, max_score: float = 50.0, length: int = 10) -> str:
