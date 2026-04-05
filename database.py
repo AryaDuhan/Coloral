@@ -167,7 +167,7 @@ class Database:
     async def get_all_time_leaderboard(self, limit: int = 10):
         self.db.row_factory = aiosqlite.Row
         async with self.db.execute(
-            """SELECT username, ROUND(SUM(score), 2) as total_score, MAX(score) as pb 
+            """SELECT user_id, username, ROUND(SUM(score), 2) as total_score, MAX(score) as pb, COUNT(*) as games
                FROM scores 
                GROUP BY user_id 
                HAVING COUNT(*) > 0 
@@ -175,6 +175,29 @@ class Database:
             (limit,),
         ) as cur:
             return await cur.fetchall()
+
+    async def get_max_streak(self, user_id: str) -> int:
+        async with self.db.execute(
+            """SELECT DATE(submitted_at) as day FROM scores
+               WHERE user_id = ?
+               GROUP BY DATE(submitted_at)
+               ORDER BY day ASC""",
+            (str(user_id),),
+        ) as cur:
+            rows = await cur.fetchall()
+        if not rows:
+            return 0
+            
+        days = [date.fromisoformat(r[0]) for r in rows]
+        max_streak = 1
+        current_streak = 1
+        for i in range(1, len(days)):
+            if (days[i] - days[i - 1]).days == 1:
+                current_streak += 1
+                max_streak = max(max_streak, current_streak)
+            else:
+                current_streak = 1
+        return max_streak
 
     async def get_all_players(self) -> list[str]:
         async with self.db.execute("SELECT DISTINCT user_id FROM scores") as cur:

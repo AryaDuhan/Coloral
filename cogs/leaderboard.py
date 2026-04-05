@@ -62,13 +62,32 @@ class LeaderboardView(discord.ui.View):
                 color=COLOR_WARNING,
             )
 
-        lines = []
+        lines = [
+            "```text",
+            "Rnk Name        Total       %-age  PB   G  🔥",
+            "----------------------------------------------"
+        ]
+        
         for i, row in enumerate(rows, start=1):
-            medal = MEDALS.get(i, f"**{i}.**")
-            username = discord.utils.escape_markdown(row["username"])
+            uid = row["user_id"]
+            name = (row["username"][:10]).ljust(11)
+            games = row["games"]
             total = row["total_score"]
             pb = row["pb"]
-            lines.append(f"{medal} **{username}** — **Cumul**: `{total}` (PB: `{pb}/50`)")
+            
+            max_pos = games * 50
+            streak = await self.db.get_max_streak(uid)
+            
+            rank = f"{i}.".rjust(3)
+            tot_str = f"{total:g}/{max_pos}".ljust(11)
+            pct = f"{(total / max_pos * 100):.1f}%".ljust(6)
+            pb_str = f"{pb:g}".ljust(4)
+            g_str = str(games).ljust(2)
+            strk = str(streak).rjust(2)
+
+            lines.append(f"{rank} {name} {tot_str} {pct} {pb_str} {g_str} {strk}")
+            
+        lines.append("```")
 
         embed = discord.Embed(
             title="🏆 All-Time Leaderboard",
