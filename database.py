@@ -31,8 +31,45 @@ class Database:
             )
         """)
         await self.db.execute("CREATE INDEX IF NOT EXISTS idx_game ON scores(game_number)")
+
+        # Guild settings (reminder channel per server)
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS guild_settings (
+                guild_id            TEXT PRIMARY KEY,
+                reminder_channel_id INTEGER NOT NULL
+            )
+        """)
+
         await self.db.commit()
         log.info(f"Database initialised at {self.path}")
+
+    # ── Guild Settings ────────────────────────────────────────────────────────
+
+    async def set_reminder_channel(self, guild_id: str, channel_id: int):
+        """Upsert the reminder channel for a guild."""
+        await self.db.execute(
+            "INSERT INTO guild_settings (guild_id, reminder_channel_id) VALUES (?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET reminder_channel_id = excluded.reminder_channel_id",
+            (str(guild_id), channel_id),
+        )
+        await self.db.commit()
+
+    async def get_reminder_channel(self, guild_id: str) -> Optional[int]:
+        """Get the reminder channel for a specific guild."""
+        async with self.db.execute(
+            "SELECT reminder_channel_id FROM guild_settings WHERE guild_id = ?",
+            (str(guild_id),),
+        ) as cur:
+            row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def get_all_reminder_channels(self) -> list[int]:
+        """Get all configured reminder channel IDs across all guilds."""
+        async with self.db.execute(
+            "SELECT reminder_channel_id FROM guild_settings"
+        ) as cur:
+            rows = await cur.fetchall()
+        return [row[0] for row in rows]
 
     async def close(self):
         if self.db:
