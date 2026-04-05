@@ -15,8 +15,8 @@ log = logging.getLogger("dialed.scores")
 DAILY_PATTERN = re.compile(
     r"Dialed\s+Daily\s*[—\-–]\s*(\w+\s+\d+).*?([\d]+(?:\.[\d]+)?)\s*/\s*50",
     re.IGNORECASE | re.DOTALL)
-# Matches: "dialed.gg?d=1&s=46.24" (just the URL)
-DAILY_URL = re.compile(r"dialed\.gg\?d=1&s=([\d]+(?:\.[\d]+)?)", re.IGNORECASE)
+# Matches: "dialed.gg?d=12&s=46.24" (just the URL)
+DAILY_URL = re.compile(r"dialed\.gg\?d=\d+&s=([\d]+(?:\.[\d]+)?)", re.IGNORECASE)
 URL_PATTERN = re.compile(r"dialed\.gg", re.IGNORECASE)
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
@@ -46,13 +46,28 @@ class ScoresCog(commands.Cog, name="Scores"):
             return
 
         match = DAILY_PATTERN.search(message.content)
+        url_match = DAILY_URL.search(message.content)
+        
         if match:
             date_str = match.group(1)
             score = float(match.group(2))
             parsed_date = _parse_date(date_str)
+            
+            # Anti-cheat: verify the text score matches the URL score exactly
+            if url_match:
+                url_score = float(url_match.group(1))
+                if score != url_score:
+                    await message.reply(
+                        embed=discord.Embed(
+                            title="❌ Altered Score Detected",
+                            description="Nice try! The score in your text doesn't match the hidden score in the dialed.gg URL. 🕵️\n\nPlease paste your authentic score directly from the game.",
+                            color=COLOR_WARNING,
+                        ),
+                        delete_after=15,
+                    )
+                    return
         else:
             # Fallback: just the URL like dialed.gg?d=1&s=46.24
-            url_match = DAILY_URL.search(message.content)
             if not url_match:
                 return
             score = float(url_match.group(1))
