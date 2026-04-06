@@ -40,6 +40,14 @@ class Database:
             )
         """)
 
+        # Bot state (persistent key-value store for things like last reminder date)
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS bot_state (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
         await self.db.commit()
         log.info(f"Database initialised at {self.path}")
 
@@ -70,6 +78,25 @@ class Database:
         ) as cur:
             rows = await cur.fetchall()
         return [row[0] for row in rows]
+
+    # ── Bot State ─────────────────────────────────────────────────────────────
+
+    async def get_last_reminder_date(self) -> Optional[str]:
+        """Get the last date a reminder was sent (as 'YYYY-MM-DD' string)."""
+        async with self.db.execute(
+            "SELECT value FROM bot_state WHERE key = 'last_reminder_date'"
+        ) as cur:
+            row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def set_last_reminder_date(self, date_str: str):
+        """Store the last date a reminder was sent."""
+        await self.db.execute(
+            "INSERT INTO bot_state (key, value) VALUES ('last_reminder_date', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (date_str,),
+        )
+        await self.db.commit()
 
     async def close(self):
         if self.db:

@@ -2,11 +2,13 @@
 cogs/reminder.py — Posts a daily reminder at a configurable UTC time.
 Admins can set the reminder channel per-server with /set_reminder_channel.
 Fallback: REMINDER_CHANNEL_ID from config.py / env var.
+
+Reminder time default: 18:30 UTC = 12:00 AM IST (midnight Indian time).
 """
 
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 
 import discord
 from discord import app_commands
@@ -28,13 +30,12 @@ log = logging.getLogger("dialed.reminder")
 class ReminderCog(commands.Cog, name="Reminder"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._last_sent_date = None  # Track so we only fire once per day
         self.daily_reminder.start()
 
     def cog_unload(self):
         self.daily_reminder.cancel()
 
-    # ── Slash Command ─────────────────────────────────────────────────────────
+    # ── Slash Commands ────────────────────────────────────────────────────────
 
     @app_commands.command(
         name="set_reminder_channel",
@@ -63,12 +64,19 @@ class ReminderCog(commands.Cog, name="Reminder"):
             str(interaction.guild_id), channel.id
         )
 
+        # Convert UTC time to IST for display
+        ist_hour = (REMINDER_HOUR + 5) % 24
+        ist_minute = (REMINDER_MINUTE + 30) % 60
+        if REMINDER_MINUTE + 30 >= 60:
+            ist_hour = (ist_hour + 1) % 24
+
         embed = discord.Embed(
             title="✅ Reminder Channel Updated",
             description=(
                 f"Daily Dialed reminders will now be posted in {channel.mention}.\n\n"
                 f"Reminders fire every day at "
-                f"**{REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC**."
+                f"**{REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC** "
+                f"(**{ist_hour:02d}:{ist_minute:02d} IST**)."
             ),
             color=COLOR_SUCCESS,
         )
@@ -91,30 +99,88 @@ class ReminderCog(commands.Cog, name="Reminder"):
         else:
             log.error(f"Unhandled error in set_reminder_channel: {error}")
 
+    @app_commands.command(
+        name="test_reminder",
+        description="Send a test reminder right now to verify your setup.",
+    )
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def test_reminder(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await self._send_reminder(test=True)
+            embed = discord.Embed(
+                title="✅ Test Reminder Sent",
+                description="Check your reminder channel — the test reminder should be there!",
+                color=COLOR_SUCCESS,
+            )
+        except Exception as e:
+            log.error(f"Test reminder failed: {e}")
+            embed = discord.Embed(
+                title="❌ Test Failed",
+                description=f"Error: `{e}`\n\nMake sure you've used `/set_reminder_channel` first.",
+                color=COLOR_ERROR,
+            )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @test_reminder.error
+    async def test_reminder_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.MissingPermissions):
+            embed = discord.Embed(
+                title="🔒 Admin Only",
+                description="Only server administrators can test reminders.",
+                color=COLOR_ERROR,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            log.error(f"Unhandled error in test_reminder: {error}")
+
     # ── Background task ───────────────────────────────────────────────────────
 
     @tasks.loop(minutes=1)
     async def daily_reminder(self):
-        """Fires every minute; posts the reminder once when the clock matches."""
+        """
+        Fires every minute. Uses catch-up logic:
+        - If it's past the scheduled time AND we haven't sent today yet → send.
+        - This means if the bot was offline at the scheduled time, it will
+          send the reminder as soon as it comes back online.
+        """
         now = datetime.now(timezone.utc)
+        today_str = now.date().isoformat()  # e.g. "2026-04-07"
 
-        if now.hour != REMINDER_HOUR or now.minute != REMINDER_MINUTE:
-            return
-
-        today = now.date()
-        if self._last_sent_date == today:
+        # Check if we already sent today (persisted in DB)
+        last_sent = await self.bot.db.get_last_reminder_date()
+        if last_sent == today_str:
             return  # Already sent today
-        self._last_sent_date = today
 
+        # Check if we've passed the scheduled time today
+        scheduled_time = now.replace(
+            hour=REMINDER_HOUR, minute=REMINDER_MINUTE, second=0, microsecond=0
+        )
+        if now < scheduled_time:
+            return  # Not yet time
+
+        # It's past the scheduled time and we haven't sent today — fire!
+        log.info(f"Reminder due for {today_str} (scheduled {REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC, now {now.strftime('%H:%M')} UTC)")
         await self._send_reminder()
+
+        # Persist that we sent today
+        await self.bot.db.set_last_reminder_date(today_str)
 
     @daily_reminder.before_loop
     async def before_reminder(self):
         await self.bot.wait_until_ready()
+        # Small delay to ensure DB is initialized
+        await asyncio.sleep(5)
+        log.info(
+            f"Reminder loop started — scheduled for {REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC daily"
+        )
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
 
-    async def _send_reminder(self):
+    async def _send_reminder(self, test: bool = False):
         # Gather channel IDs: DB entries + legacy env fallback
         db_channels = await self.bot.db.get_all_reminder_channels()
         channel_ids = set(db_channels)
@@ -132,8 +198,9 @@ class ReminderCog(commands.Cog, name="Reminder"):
         game_number = await self.bot.db.get_current_game_number()
         game_str = f"#**{game_number + 1}**" if game_number else ""
 
+        title = "🧪 Test Reminder" if test else "🎨 A New Color is Waiting!"
         embed = discord.Embed(
-            title="🎨 A New Color is Waiting!",
+            title=title,
             description=(
                 f"Today's Dialed puzzle {game_str} is live!\n\n"
                 "Can you guess the color from memory?\n"
@@ -144,12 +211,13 @@ class ReminderCog(commands.Cog, name="Reminder"):
             color=COLOR_PRIMARY,
         )
         embed.set_footer(
-            text=f"Daily reminder  •  {datetime.now(timezone.utc).strftime('%B %d, %Y')}"
+            text=f"{'Test reminder' if test else 'Daily reminder'}  •  {datetime.now(timezone.utc).strftime('%B %d, %Y')}"
         )
 
         players = await self.bot.db.get_all_players()
-        mention_str = " ".join(f"<@{p}>" for p in players)
+        mention_str = " ".join(f"<@{p}>" for p in players) if players else ""
 
+        sent_count = 0
         for ch_id in channel_ids:
             channel = self.bot.get_channel(ch_id)
             if channel is None:
@@ -159,13 +227,22 @@ class ReminderCog(commands.Cog, name="Reminder"):
                 )
                 continue
             try:
-                # Send the mentions string as the message content, so Discord pings them
-                await channel.send(content=mention_str[:2000], embed=embed, view=PlayView())
-                log.info(f"Daily reminder posted to channel {ch_id}")
+                await channel.send(
+                    content=mention_str[:2000] if mention_str else None,
+                    embed=embed,
+                    view=PlayView(),
+                )
+                sent_count += 1
+                log.info(f"{'Test' if test else 'Daily'} reminder posted to channel {ch_id}")
             except discord.Forbidden:
                 log.error(f"Missing permissions to send to channel {ch_id}")
             except discord.HTTPException as e:
                 log.error(f"Failed to send reminder to {ch_id}: {e}")
+
+        if sent_count == 0:
+            log.error("Reminder was due but could not be sent to any channel!")
+        else:
+            log.info(f"Reminder sent to {sent_count} channel(s)")
 
 
 async def setup(bot: commands.Bot):

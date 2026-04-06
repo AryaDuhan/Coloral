@@ -19,8 +19,9 @@ CONFIRM_EMOJI = "🎨"
 REMINDER_CHANNEL_ID: int | None = int(os.getenv("REMINDER_CHANNEL_ID", "0")) or None
 
 # 24-hour UTC time for the daily reminder
-REMINDER_HOUR   = int(os.getenv("REMINDER_HOUR",   "9"))
-REMINDER_MINUTE = int(os.getenv("REMINDER_MINUTE", "0"))
+# Default: 18:30 UTC = 12:00 AM IST (midnight Indian time)
+REMINDER_HOUR   = int(os.getenv("REMINDER_HOUR",   "18"))
+REMINDER_MINUTE = int(os.getenv("REMINDER_MINUTE", "30"))
 
 # ── Graph ─────────────────────────────────────────────────────────────────────
 
