@@ -167,8 +167,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         log.info(f"Bot restart requested by {interaction.user} in {interaction.guild_id}")
         await self.bot.close()
-        import os
-        os._exit(0)
+        import sys, os
+        os.execv(sys.executable, [sys.executable, "bot.py"])
 
     @restart_bot.error
     async def restart_bot_error(
@@ -221,8 +221,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
             log.info(f"Git pull and restart requested by {interaction.user}")
             
             await self.bot.close()
-            import os
-            os._exit(0)
+            import sys, os
+            os.execv(sys.executable, [sys.executable, "bot.py"])
 
         except Exception as e:
             embed = discord.Embed(

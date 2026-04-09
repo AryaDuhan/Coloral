@@ -48,10 +48,10 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         )
         await self._broadcast(embed)
         
-        # Close the bot to trigger the bash loop restart
+        # Replace the current process with a fresh bot instance (same terminal)
         await self.bot.close()
-        import os
-        os._exit(0)
+        import sys, os
+        os.execv(sys.executable, [sys.executable, "bot.py"])
 
     @auto_restart.before_loop
     async def before_auto_restart(self):
