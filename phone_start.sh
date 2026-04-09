@@ -4,9 +4,10 @@
 # Usage:  bash phone_start.sh          (foreground)
 #         nohup bash phone_start.sh &  (background — survives closing Termux)
 #
-# The bot restarts itself every 6 hours via its lifecycle cog (os.execv).
-# The timeout here is a SAFETY NET: if the bot freezes and can't self-restart,
-# this script force-kills it after 7 hours and starts fresh.
+# The bot's lifecycle cog calls sys.exit(0) to restart.
+# This loop catches the exit and boots the bot back up.
+# The timeout is a SAFETY NET: if the bot freezes, this script
+# force-kills it after 7 hours and starts fresh.
 # ─────────────────────────────────────────────────────────────────────────────
 
 cd "$(dirname "$0")"
@@ -16,24 +17,20 @@ if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
 fi
 
-# ── Ctrl+C handler ────────────────────────────────────────────────────────
-# Without this, Ctrl+C only kills the inner python process and the
-# while-true loop immediately restarts it.
-KEEP_RUNNING=true
-trap 'echo ""; echo "🛑  Caught Ctrl+C — shutting down."; KEEP_RUNNING=false; kill $BOT_PID 2>/dev/null; exit 0' INT TERM
+# Ctrl+C exits the entire script cleanly
+trap 'echo ""; echo "🛑  Caught Ctrl+C — shutting down."; exit 0' INT TERM
 
 echo "📱 Starting Dialed bot (Phone Mode)..."
 
-while $KEEP_RUNNING; do
-    # 7h timeout = safety net in case the bot's 6h self-restart hangs
-    timeout 7h python bot.py &
-    BOT_PID=$!
-    wait $BOT_PID
+while true; do
+    # 7h timeout = safety net in case the bot freezes
+    timeout 7h python bot.py
     EXIT_CODE=$?
 
-    # If we were told to stop (Ctrl+C), don't loop
-    if ! $KEEP_RUNNING; then
-        break
+    # Exit code 130 = Ctrl+C was pressed (SIGINT), so stop looping
+    if [ $EXIT_CODE -eq 130 ]; then
+        echo "🛑  Stopped."
+        exit 0
     fi
 
     echo ""
