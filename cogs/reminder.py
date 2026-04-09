@@ -311,9 +311,20 @@ class ReminderCog(commands.Cog, name="Reminder"):
             ),
             color=COLOR_PRIMARY,
         )
-        embed.set_footer(
-            text=f"{'Test reminder' if test else 'Daily reminder'}  •  {datetime.now(timezone.utc).strftime('%B %d, %Y')}"
-        )
+        footer_text = f"{'Test reminder' if test else 'Daily reminder'}  •  {datetime.now(timezone.utc).strftime('%B %d, %Y')}"
+        if test:
+            now = datetime.now(timezone.utc)
+            scheduled_time = now.replace(
+                hour=REMINDER_HOUR, minute=REMINDER_MINUTE, second=0, microsecond=0
+            )
+            if now >= scheduled_time:
+                scheduled_time += timedelta(days=1)
+            diff = scheduled_time - now
+            hours, remainder = divmod(int(diff.total_seconds()), 3600)
+            minutes, _ = divmod(remainder, 60)
+            footer_text += f"  •  ⏳ Next reminder in {hours}h {minutes}m"
+
+        embed.set_footer(text=footer_text)
 
         players = await self.bot.db.get_all_players()
         mention_str = " ".join(f"<@{p}>" for p in players) if players else ""
