@@ -3,7 +3,6 @@ cogs/lifecycle.py — Manages bot startup/shutdown messages and the 6-hour auto-
 """
 
 import sys
-import os
 import asyncio
 import logging
 import discord
@@ -45,7 +44,8 @@ async def shutdown_and_restart(bot):
     # Small delay to ensure messages are delivered
     await asyncio.sleep(1)
     await bot.close()
-    os.execv(sys.executable, [sys.executable, "bot.py"])
+    # Exit cleanly — phone_start.sh's while-true loop will restart us
+    sys.exit(0)
 
 
 class LifecycleCog(commands.Cog, name="Lifecycle"):
