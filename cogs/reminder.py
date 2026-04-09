@@ -109,9 +109,24 @@ class ReminderCog(commands.Cog, name="Reminder"):
         await interaction.response.defer(ephemeral=True)
         try:
             await self._send_reminder(test=True)
+            
+            now = datetime.now(timezone.utc)
+            scheduled_time = now.replace(
+                hour=REMINDER_HOUR, minute=REMINDER_MINUTE, second=0, microsecond=0
+            )
+            if now >= scheduled_time:
+                scheduled_time += timedelta(days=1)
+            
+            diff = scheduled_time - now
+            hours, remainder = divmod(int(diff.total_seconds()), 3600)
+            minutes, _ = divmod(remainder, 60)
+
             embed = discord.Embed(
                 title="✅ Test Reminder Sent",
-                description="Check your reminder channel — the test reminder should be there!",
+                description=(
+                    "Check your reminder channel — the test reminder should be there!\n\n"
+                    f"⏳ The next automated daily reminder will fire in **{hours}h {minutes}m**."
+                ),
                 color=COLOR_SUCCESS,
             )
         except Exception as e:
@@ -137,6 +152,83 @@ class ReminderCog(commands.Cog, name="Reminder"):
         else:
             log.error(f"Unhandled error in test_reminder: {error}")
 
+    @app_commands.command(
+        name="restart",
+        description="Restart the bot (useful when running with auto-start scripts).",
+    )
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def restart_bot(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🔄 Restarting...",
+            description="The bot is shutting down and will be restarted by the phone script.",
+            color=COLOR_SUCCESS,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        log.info(f"Bot restart requested by {interaction.user} in {interaction.guild_id}")
+        await self.bot.close()
+
+    @restart_bot.error
+    async def restart_bot_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.MissingPermissions):
+            embed = discord.Embed(
+                title="🔒 Admin Only",
+                description="Only server administrators can restart the bot.",
+                color=COLOR_ERROR,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            log.error(f"Unhandled error in restart_bot: {error}")
+
+    @app_commands.command(
+        name="gitpull",
+        description="Pull the latest updates from GitHub and restart the bot.",
+    )
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def gitpull(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            import asyncio
+            proc = await asyncio.create_subprocess_shell(
+                "git pull",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            output = stdout.decode().strip()
+            error = stderr.decode().strip()
+
+            if proc.returncode != 0:
+                embed = discord.Embed(
+                    title="❌ Git Pull Failed",
+                    description=f"```\n{error or output}\n```",
+                    color=COLOR_ERROR
+                )
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title="✅ Git Pull",
+                description=f"```\n{output}\n```\n🔄 Restarting bot to apply changes...",
+                color=COLOR_SUCCESS
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            log.info(f"Git pull and restart requested by {interaction.user}")
+            
+            await self.bot.close()
+
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Error",
+                description=f"```{e}```",
+                color=COLOR_ERROR
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            log.error(f"Unhandled error in gitpull: {e}")
+
     # ── Background task ───────────────────────────────────────────────────────
 
     @tasks.loop(minutes=1)
@@ -148,26 +240,32 @@ class ReminderCog(commands.Cog, name="Reminder"):
           send the reminder as soon as it comes back online.
         """
         now = datetime.now(timezone.utc)
-        today_str = now.date().isoformat()  # e.g. "2026-04-07"
+        
+        # Calculate the current "Dialed Day"
+        # A new Dialed Day begins at the scheduled UTC time.
+        if now.hour < REMINDER_HOUR or (now.hour == REMINDER_HOUR and now.minute < REMINDER_MINUTE):
+            dialed_date = (now - timedelta(days=1)).date()
+        else:
+            dialed_date = now.date()
 
-        # Check if we already sent today (persisted in DB)
+        current_game_day_str = dialed_date.isoformat()
+
+        # Check if we already sent for the current Dialed Day
         last_sent = await self.bot.db.get_last_reminder_date()
-        if last_sent == today_str:
-            return  # Already sent today
-
-        # Check if we've passed the scheduled time today
-        scheduled_time = now.replace(
-            hour=REMINDER_HOUR, minute=REMINDER_MINUTE, second=0, microsecond=0
-        )
-        if now < scheduled_time:
-            return  # Not yet time
+        if last_sent == current_game_day_str:
+            return  # Already sent for this Dialed Day
 
         # It's past the scheduled time and we haven't sent today — fire!
-        log.info(f"Reminder due for {today_str} (scheduled {REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC, now {now.strftime('%H:%M')} UTC)")
-        await self._send_reminder()
+        log.info(f"Reminder due for Dialed Day {current_game_day_str} "
+                 f"(scheduled {REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC, now {now.strftime('%H:%M')} UTC)")
+        
+        try:
+            await self._send_reminder()
+        except Exception as e:
+            log.error(f"Unhandled error in _send_reminder: {e}")
 
-        # Persist that we sent today
-        await self.bot.db.set_last_reminder_date(today_str)
+        # Persist that we sent so we don't double fire
+        await self.bot.db.set_last_reminder_date(current_game_day_str)
 
     @daily_reminder.before_loop
     async def before_reminder(self):

@@ -37,7 +37,50 @@ class ScoresCog(commands.Cog, name="Scores"):
         self.bot = bot
 
     @commands.Cog.listener()
+    async def on_ready(self):
+        if getattr(self, "_caught_up_scores", False):
+            return
+        self._caught_up_scores = True
+        self.bot.loop.create_task(self._run_catchup())
+
+    async def _run_catchup(self):
+        await self.bot.wait_until_ready()
+        channels = set()
+        if SCORE_CHANNEL_ID:
+            channels.add(SCORE_CHANNEL_ID)
+        else:
+            db_channels = await self.bot.db.get_all_reminder_channels()
+            channels.update(db_channels)
+
+        if not channels:
+            return
+
+        log.info("Starting catch-up check for missed scores...")
+        count = 0
+        for ch_id in channels:
+            channel = self.bot.get_channel(ch_id)
+            if not channel:
+                continue
+            
+            try:
+                # Fetch recent messages chronological
+                recent_msgs = [msg async for msg in channel.history(limit=300)]
+                for message in reversed(recent_msgs):
+                    if URL_PATTERN.search(message.content):
+                        await self.process_message(message, is_catchup=True)
+                        count += 1
+            except discord.Forbidden:
+                pass
+            except discord.HTTPException as e:
+                log.error(f"Error checking channel {ch_id}: {e}")
+                
+        log.info(f"Catch-up completed by matching against {count} dialed message(s)")
+
+    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        await self.process_message(message, is_catchup=False)
+
+    async def process_message(self, message: discord.Message, is_catchup: bool = False):
         if message.author.bot:
             return
         if SCORE_CHANNEL_ID and message.channel.id != SCORE_CHANNEL_ID:
@@ -57,14 +100,15 @@ class ScoresCog(commands.Cog, name="Scores"):
             if url_match:
                 url_score = float(url_match.group(1))
                 if score != url_score:
-                    await message.reply(
-                        embed=discord.Embed(
-                            title="❌ Altered Score Detected",
-                            description="Nice try! The score in your text doesn't match the hidden score in the dialed.gg URL. 🕵️\n\nPlease paste your authentic score directly from the game.",
-                            color=COLOR_WARNING,
-                        ),
-                        delete_after=15,
-                    )
+                    if not is_catchup:
+                        await message.reply(
+                            embed=discord.Embed(
+                                title="❌ Altered Score Detected",
+                                description="Nice try! The score in your text doesn't match the hidden score in the dialed.gg URL. 🕵️\n\nPlease paste your authentic score directly from the game.",
+                                color=COLOR_WARNING,
+                            ),
+                            delete_after=15,
+                        )
                     return
         else:
             # Fallback: just the URL like dialed.gg?d=1&s=46.24
@@ -86,14 +130,15 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         existing = await db.get_existing_score(user_id, game_number)
         if existing is not None:
-            await message.reply(
-                embed=discord.Embed(
-                    title="Score Already Recorded 🔒",
-                    description=f"You already submitted **{existing}/50** for this daily.\nYour first score is locked in!",
-                    color=COLOR_WARNING,
-                ),
-                delete_after=15,
-            )
+            if not is_catchup:
+                await message.reply(
+                    embed=discord.Embed(
+                        title="Score Already Recorded 🔒",
+                        description=f"You already submitted **{existing}/50** for this daily.\nYour first score is locked in!",
+                        color=COLOR_WARNING,
+                    ),
+                    delete_after=15,
+                )
             return
 
         success = await db.insert_score(user_id, username, game_number, score)
@@ -125,7 +170,7 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
         await message.reply(embed=embed)
-        log.info(f"Recorded: user={user_id} name={username} game={game_number} score={score}")
+        log.info(f"{'[CATCHUP] ' if is_catchup else ''}Recorded: user={user_id} name={username} game={game_number} score={score}")
 
 
 def _score_bar(score: float, max_score: float = 50.0, length: int = 20) -> str:

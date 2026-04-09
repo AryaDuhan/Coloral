@@ -44,7 +44,7 @@ async def on_ready():
     bot.add_view(PlayView())
 
     # Load all cogs
-    cogs = ["cogs.scores", "cogs.leaderboard", "cogs.stats", "cogs.graph", "cogs.reminder", "cogs.color"]
+    cogs = ["cogs.scores", "cogs.leaderboard", "cogs.stats", "cogs.graph", "cogs.reminder", "cogs.color", "cogs.lifecycle"]
     for cog in cogs:
         try:
             await bot.load_extension(cog)
