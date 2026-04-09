@@ -167,6 +167,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         log.info(f"Bot restart requested by {interaction.user} in {interaction.guild_id}")
         await self.bot.close()
+        import os
+        os._exit(0)
 
     @restart_bot.error
     async def restart_bot_error(
@@ -219,6 +221,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
             log.info(f"Git pull and restart requested by {interaction.user}")
             
             await self.bot.close()
+            import os
+            os._exit(0)
 
         except Exception as e:
             embed = discord.Embed(
@@ -241,16 +245,17 @@ class ReminderCog(commands.Cog, name="Reminder"):
         """
         now = datetime.now(timezone.utc)
         
-        # Calculate the current "Dialed Day"
-        # A new Dialed Day begins at the scheduled UTC time.
-        if now.hour < REMINDER_HOUR or (now.hour == REMINDER_HOUR and now.minute < REMINDER_MINUTE):
-            dialed_date = (now - timedelta(days=1)).date()
-        else:
-            dialed_date = now.date()
+        # Have we passed today's scheduled time?
+        scheduled_today = now.replace(
+            hour=REMINDER_HOUR, minute=REMINDER_MINUTE, second=0, microsecond=0
+        )
+        if now < scheduled_today:
+            return  # Not yet time today
 
-        current_game_day_str = dialed_date.isoformat()
+        # We're past the scheduled time. The "Dialed Day" is today's UTC date.
+        current_game_day_str = now.date().isoformat()
 
-        # Check if we already sent for the current Dialed Day
+        # Check if we already sent for this Dialed Day
         last_sent = await self.bot.db.get_last_reminder_date()
         if last_sent == current_game_day_str:
             return  # Already sent for this Dialed Day

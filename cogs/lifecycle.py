@@ -50,6 +50,8 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         
         # Close the bot to trigger the bash loop restart
         await self.bot.close()
+        import os
+        os._exit(0)
 
     @auto_restart.before_loop
     async def before_auto_restart(self):
