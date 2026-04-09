@@ -43,12 +43,13 @@ async def on_ready():
     from ui import PlayView
     bot.add_view(PlayView())
 
-    # Load all cogs
+    # Load all cogs (skip if already loaded — happens on os.execv restarts)
     cogs = ["cogs.scores", "cogs.leaderboard", "cogs.stats", "cogs.graph", "cogs.reminder", "cogs.color", "cogs.lifecycle"]
     for cog in cogs:
         try:
-            await bot.load_extension(cog)
-            log.info(f"  ✓ Loaded {cog}")
+            if cog not in bot.extensions:
+                await bot.load_extension(cog)
+                log.info(f"  ✓ Loaded {cog}")
         except Exception as e:
             log.error(f"  ✗ Failed to load {cog}: {e}")
 
@@ -65,6 +66,12 @@ async def on_ready():
             name="dialed.gg 🎨"
         )
     )
+
+    # Announce that the bot is online
+    lifecycle_cog = bot.get_cog("Lifecycle")
+    if lifecycle_cog:
+        await lifecycle_cog.send_online_message()
+
     log.info("Bot is ready!")
 
 

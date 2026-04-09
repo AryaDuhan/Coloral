@@ -161,14 +161,13 @@ class ReminderCog(commands.Cog, name="Reminder"):
     async def restart_bot(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🔄 Restarting...",
-            description="The bot is shutting down and will be restarted by the phone script.",
+            description="The bot is restarting. It will be back online in a few seconds!",
             color=COLOR_SUCCESS,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         log.info(f"Bot restart requested by {interaction.user} in {interaction.guild_id}")
-        await self.bot.close()
-        import sys, os
-        os.execv(sys.executable, [sys.executable, "bot.py"])
+        from cogs.lifecycle import shutdown_and_restart
+        await shutdown_and_restart(self.bot)
 
     @restart_bot.error
     async def restart_bot_error(
@@ -220,9 +219,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
             await interaction.followup.send(embed=embed, ephemeral=True)
             log.info(f"Git pull and restart requested by {interaction.user}")
             
-            await self.bot.close()
-            import sys, os
-            os.execv(sys.executable, [sys.executable, "bot.py"])
+            from cogs.lifecycle import shutdown_and_restart
+            await shutdown_and_restart(self.bot)
 
         except Exception as e:
             embed = discord.Embed(

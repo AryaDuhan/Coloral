@@ -3,12 +3,49 @@ cogs/lifecycle.py — Manages bot startup/shutdown messages and the 6-hour auto-
 """
 
 import sys
+import os
+import asyncio
 import logging
 import discord
 from discord.ext import commands, tasks
-from config import COLOR_SUCCESS, COLOR_WARNING
+from config import COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, REMINDER_CHANNEL_ID
 
 log = logging.getLogger("dialed.lifecycle")
+
+
+async def broadcast(bot, embed: discord.Embed):
+    """Sends the given embed to all registered reminder channels."""
+    channels = set()
+    try:
+        db_channels = await bot.db.get_all_reminder_channels()
+        channels.update(db_channels)
+    except Exception:
+        pass
+    if REMINDER_CHANNEL_ID:
+        channels.add(REMINDER_CHANNEL_ID)
+
+    for ch_id in channels:
+        channel = bot.get_channel(ch_id)
+        if not channel:
+            continue
+        try:
+            await channel.send(embed=embed)
+        except discord.HTTPException:
+            pass
+
+
+async def shutdown_and_restart(bot):
+    """Broadcast shutdown, close the bot, then replace the process."""
+    embed = discord.Embed(
+        title="🔄 Restarting...",
+        description="The bot is shutting down for a restart. Be right back!",
+        color=COLOR_WARNING,
+    )
+    await broadcast(bot, embed)
+    # Small delay to ensure messages are delivered
+    await asyncio.sleep(1)
+    await bot.close()
+    os.execv(sys.executable, [sys.executable, "bot.py"])
 
 
 class LifecycleCog(commands.Cog, name="Lifecycle"):
@@ -16,23 +53,18 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         self.bot = bot
         self.auto_restart.start()
 
-    def cog_unload(self):
-        self.auto_restart.cancel()
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        # Only send the startup message once per process
-        if getattr(self, "_startup_sent", False):
-            return
-        self._startup_sent = True
-
+    async def send_online_message(self):
+        """Send the startup announcement. Called from bot.py after cogs load."""
         log.info("Announcing startup to channels...")
         embed = discord.Embed(
             title="🟢 Bot Online",
-            description="The Dialed bot has successfully started (or restarted) and is ready to track scores!",
+            description="The Dialed bot has successfully started and is ready to track scores!",
             color=COLOR_SUCCESS,
         )
-        await self._broadcast(embed)
+        await broadcast(self.bot, embed)
+
+    def cog_unload(self):
+        self.auto_restart.cancel()
 
     @tasks.loop(hours=6)
     async def auto_restart(self):
@@ -41,39 +73,11 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
             return
 
         log.info("6-hour auto-restart triggered.")
-        embed = discord.Embed(
-            title="🔄 Auto-Restarting",
-            description="The bot is performing its scheduled 6-hour cache reset. Be right back in 5 seconds!",
-            color=COLOR_WARNING,
-        )
-        await self._broadcast(embed)
-        
-        # Replace the current process with a fresh bot instance (same terminal)
-        await self.bot.close()
-        import sys, os
-        os.execv(sys.executable, [sys.executable, "bot.py"])
+        await shutdown_and_restart(self.bot)
 
     @auto_restart.before_loop
     async def before_auto_restart(self):
         await self.bot.wait_until_ready()
-
-    async def _broadcast(self, embed: discord.Embed):
-        """Sends the given embed to all registered reminder channels."""
-        channels = set()
-        db_channels = await self.bot.db.get_all_reminder_channels()
-        channels.update(db_channels)
-
-        # Also fallback to the SCORE_CHANNEL_ID if imported, but usually config channels is enough here.
-        # We'll just rely on the DB channels since that's verified to be set.
-        
-        for ch_id in channels:
-            channel = self.bot.get_channel(ch_id)
-            if not channel:
-                continue
-            try:
-                await channel.send(embed=embed)
-            except discord.HTTPException:
-                pass
 
 
 async def setup(bot: commands.Bot):
