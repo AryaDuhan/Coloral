@@ -6,7 +6,8 @@ import logging
 import discord
 from discord import app_commands
 from discord.ext import commands
-from config import COLOR_PRIMARY, COLOR_WARNING
+from datetime import date
+from config import COLOR_PRIMARY, COLOR_WARNING, COLOR_SUCCESS
 
 log = logging.getLogger("dialed.stats")
 
@@ -63,6 +64,32 @@ class StatsCog(commands.Cog, name="Stats"):
         embed.set_footer(text="/leaderboard for today's rankings")
         embed.timestamp = discord.utils.utcnow()
         await interaction.followup.send(embed=embed)
+
+    @app_commands.command(
+        name="cleartoday",
+        description="Clear your Dialed daily score for today, letting you submit again."
+    )
+    async def cleartoday(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        db = self.bot.db
+        user_id = str(interaction.user.id)
+        game_number = int(date.today().strftime("%Y%m%d"))
+        
+        success = await db.delete_score(user_id, game_number)
+        if success:
+            embed = discord.Embed(
+                title="✅ Score Cleared",
+                description="Your score for today has been deleted. You can now paste your true score in the score channel!",
+                color=COLOR_SUCCESS,
+            )
+        else:
+            embed = discord.Embed(
+                title="❌ No Score Found",
+                description="I couldn't find a score for you today to delete.",
+                color=COLOR_WARNING,
+            )
+            
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 def _score_label(mean: float) -> str:

@@ -113,6 +113,15 @@ class Database:
         except aiosqlite.IntegrityError:
             return False
 
+    async def delete_score(self, user_id: str, game_number: int) -> bool:
+        async with self.db.execute(
+            "DELETE FROM scores WHERE user_id = ? AND game_number = ?",
+            (str(user_id), game_number),
+        ) as cur:
+            success = cur.rowcount > 0
+        await self.db.commit()
+        return success
+
     async def get_existing_score(self, user_id: str, game_number: int) -> Optional[float]:
         async with self.db.execute(
             "SELECT score FROM scores WHERE user_id = ? AND game_number = ?",

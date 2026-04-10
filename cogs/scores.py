@@ -16,7 +16,7 @@ DAILY_PATTERN = re.compile(
     r"Dialed\s+Daily\s*[—\-–]\s*(\w+\s+\d+).*?([\d]+(?:\.[\d]+)?)\s*/\s*50",
     re.IGNORECASE | re.DOTALL)
 # Matches: "dialed.gg?d=12&s=46.24" (just the URL)
-DAILY_URL = re.compile(r"dialed\.gg\?d=\d+&s=([\d]+(?:\.[\d]+)?)", re.IGNORECASE)
+DAILY_URL = re.compile(r"dialed\.gg\?d=(\d+)&s=([\d]+(?:\.[\d]+)?)", re.IGNORECASE)
 URL_PATTERN = re.compile(r"dialed\.gg", re.IGNORECASE)
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
@@ -64,7 +64,7 @@ class ScoresCog(commands.Cog, name="Scores"):
             
             try:
                 # Fetch recent messages chronological
-                recent_msgs = [msg async for msg in channel.history(limit=300)]
+                recent_msgs = [msg async for msg in channel.history(limit=20)]
                 for message in reversed(recent_msgs):
                     if URL_PATTERN.search(message.content):
                         await self.process_message(message, is_catchup=True)
@@ -91,6 +91,12 @@ class ScoresCog(commands.Cog, name="Scores"):
         match = DAILY_PATTERN.search(message.content)
         url_match = DAILY_URL.search(message.content)
         
+        if url_match:
+            d_val = int(url_match.group(1))
+            if d_val < 20000000:
+                # This is likely a single mode score (e.g. d=1 for difficulty 1), ignore it.
+                return
+
         if match:
             date_str = match.group(1)
             score = float(match.group(2))
@@ -98,7 +104,7 @@ class ScoresCog(commands.Cog, name="Scores"):
             
             # Anti-cheat: verify the text score matches the URL score exactly
             if url_match:
-                url_score = float(url_match.group(1))
+                url_score = float(url_match.group(2))
                 if score != url_score:
                     if not is_catchup:
                         await message.reply(
@@ -111,10 +117,10 @@ class ScoresCog(commands.Cog, name="Scores"):
                         )
                     return
         else:
-            # Fallback: just the URL like dialed.gg?d=1&s=46.24
+            # Fallback: just the URL like dialed.gg?d=20260405&s=46.24
             if not url_match:
                 return
-            score = float(url_match.group(1))
+            score = float(url_match.group(2))
             parsed_date = None
 
         if score <= 0 or score > 50:
