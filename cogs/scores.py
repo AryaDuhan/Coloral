@@ -91,7 +91,7 @@ class ScoresCog(commands.Cog, name="Scores"):
         match = DAILY_PATTERN.search(message.content)
         url_match = DAILY_URL.search(message.content)
         
-        if url_match:
+        if not match and url_match:
             d_val = int(url_match.group(1))
             if d_val < 20000000:
                 # This is likely a single mode score (e.g. d=1 for difficulty 1), ignore it.
