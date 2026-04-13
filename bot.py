@@ -30,7 +30,31 @@ log = logging.getLogger("dialed")
 intents = discord.Intents.default()
 intents.message_content = True  # Required to read message text
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+class DialedBot(commands.Bot):
+    async def setup_hook(self):
+        await self.db.init()
+
+        from ui import PlayView
+        self.add_view(PlayView())
+
+        # Load all cogs (skip if already loaded — happens on os.execv restarts)
+        exts = ["cogs.scores", "cogs.leaderboard", "cogs.stats", "cogs.graph", "cogs.reminder", "cogs.color", "cogs.lifecycle"]
+        for cog in exts:
+            try:
+                if cog not in self.extensions:
+                    await self.load_extension(cog)
+                    log.info(f"  ✓ Loaded {cog}")
+            except Exception as e:
+                log.error(f"  ✗ Failed to load {cog}: {e}")
+
+        # Sync slash commands globally
+        try:
+            synced = await self.tree.sync()
+            log.info(f"Synced {len(synced)} slash command(s)")
+        except Exception as e:
+            log.error(f"Failed to sync commands: {e}")
+
+bot = DialedBot(command_prefix="!", intents=intents)
 bot.db = Database("dialed.db")
 
 
@@ -38,27 +62,6 @@ bot.db = Database("dialed.db")
 @bot.event
 async def on_ready():
     log.info(f"Logged in as {bot.user} (ID: {bot.user.id})")
-    await bot.db.init()
-
-    from ui import PlayView
-    bot.add_view(PlayView())
-
-    # Load all cogs (skip if already loaded — happens on os.execv restarts)
-    cogs = ["cogs.scores", "cogs.leaderboard", "cogs.stats", "cogs.graph", "cogs.reminder", "cogs.color", "cogs.lifecycle"]
-    for cog in cogs:
-        try:
-            if cog not in bot.extensions:
-                await bot.load_extension(cog)
-                log.info(f"  ✓ Loaded {cog}")
-        except Exception as e:
-            log.error(f"  ✗ Failed to load {cog}: {e}")
-
-    # Sync slash commands globally
-    try:
-        synced = await bot.tree.sync()
-        log.info(f"Synced {len(synced)} slash command(s)")
-    except Exception as e:
-        log.error(f"Failed to sync commands: {e}")
 
     await bot.change_presence(
         activity=discord.Activity(
