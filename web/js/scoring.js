@@ -152,8 +152,8 @@ function ciede2000(lab1, lab2) {
  * Matches dialed.gg generous decay formula closely.
  */
 function deltaEToScore(dE) {
-  // exponential decay: high score dropoff to ~25 dE, then tails off
-  const score = 10 * Math.exp(-Math.pow(dE/35, 1.35));
+  // Steep exponential decay down to ~1.0 score when Delta E is vastly mismatched (e.g. 33 degrees)
+  const score = 10 * Math.exp(-Math.pow(dE/18, 1.4));
   return Math.max(0, parseFloat(score.toFixed(2)));
 }
 
@@ -181,26 +181,14 @@ export function scoreRound(target, guess) {
   const dE = ciede2000(targetLab, guessLab);
   let score = deltaEToScore(dE);
 
-  const hDiff = hueDiff(target.h, guess.h);
-  const minSat = Math.min(target.s, guess.s);
-  // Saturation factor: fades to 0 below 30% (hue becomes meaningless on greys)
-  const satFactor = minSat >= 30 ? 1 : minSat / 30;
-
-  // Hue penalty: if hue is far off (> 30°), penalize on vivid colors
-  if (hDiff > 30) {
-    const hueBadness = Math.min((hDiff - 30) / 150, 1);
-    score -= 0.15 * score * hueBadness * satFactor;
-  }
-
   return Math.max(0, Math.min(10, parseFloat(score.toFixed(2))));
 }
 
-/**
- * Get emoji for a round score.
- */
 export function scoreEmoji(score) {
-  if (score >= 8) return '🟩';
-  if (score >= 6) return '🟨';
-  if (score >= 4) return '🟧';
-  return '🟥';
+  if (score >= 9.5) return '🟩'; 
+  if (score >= 8.0) return '🟨';
+  if (score >= 6.0) return '🟧';
+  if (score >= 4.0) return '🟥';
+  if (score >= 2.0) return '🟫';
+  return '⬛';
 }

@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  const { token, scores, totalScore, cheatEvents, isTest } = req.body;
+  const { token, scores, totalScore, cheatEvents, isTest, roundData } = req.body;
 
   if (!token || !scores || totalScore == null) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -101,12 +101,15 @@ module.exports = async (req, res) => {
 
   // ── Post to Discord Webhook ──────────────────────────────────────────────
   // The embed footer carries verification data for the bot to parse.
-  // Format: userId|gameNumber|score|cheatCount|hmacSig|cheatDetails|TEST?
+  // Format: userId|gameNumber|score|cheatCount|hmacSig|cheatDetails|TEST?|roundData
   const footerParts = [userId, gameNumber, roundedTotal, cheatCount, scoreSig];
   if (cheatDetails) footerParts.push(cheatDetails);
-  else if (isTest) footerParts.push(""); // pad if missing and we need to append test
+  else if (isTest || roundData) footerParts.push(""); // pad if missing and we need to append more 
   
   if (isTest) footerParts.push("TEST");
+  else if (roundData) footerParts.push("");
+
+  if (roundData) footerParts.push(roundData);
 
   // Pick embed color based on score
   let embedColor = 0x6BCB77; // green

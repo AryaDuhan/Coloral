@@ -45,6 +45,12 @@ class Database:
         """)
         await self.db.execute("CREATE INDEX IF NOT EXISTS idx_game_test ON test_scores(game_number)")
 
+        try:
+            await self.db.execute("ALTER TABLE scores ADD COLUMN round_data TEXT DEFAULT ''")
+            await self.db.execute("ALTER TABLE test_scores ADD COLUMN round_data TEXT DEFAULT ''")
+        except aiosqlite.OperationalError:
+            pass # Columns already exist
+
         # Guild settings (reminder channel per server)
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS guild_settings (
@@ -115,11 +121,11 @@ class Database:
         if self.db:
             await self.db.close()
 
-    async def insert_score(self, user_id: str, username: str, game_number: int, score: float) -> bool:
+    async def insert_score(self, user_id: str, username: str, game_number: int, score: float, round_data: str = "") -> bool:
         try:
             await self.db.execute(
-                "INSERT INTO scores (user_id, username, game_number, score) VALUES (?, ?, ?, ?)",
-                (str(user_id), username, game_number, score),
+                "INSERT INTO scores (user_id, username, game_number, score, round_data) VALUES (?, ?, ?, ?, ?)",
+                (str(user_id), username, game_number, score, round_data),
             )
             await self.db.commit()
             return True
@@ -135,13 +141,14 @@ class Database:
         await self.db.commit()
         return success
 
-    async def get_existing_score(self, user_id: str, game_number: int) -> Optional[float]:
+    async def get_existing_score(self, user_id: str, game_number: int):
+        self.db.row_factory = aiosqlite.Row
         async with self.db.execute(
-            "SELECT score FROM scores WHERE user_id = ? AND game_number = ?",
+            "SELECT score, round_data FROM scores WHERE user_id = ? AND game_number = ?",
             (str(user_id), game_number),
         ) as cur:
             row = await cur.fetchone()
-        return row[0] if row else None
+        return dict(row) if row else None
 
     async def get_leaderboard(self, game_number: int, limit: int = 10):
         self.db.row_factory = aiosqlite.Row
@@ -153,13 +160,13 @@ class Database:
 
     # ── Test Scores (Webhook Testing) ─────────────────────────────────────────
 
-    async def insert_test_score(self, user_id: str, username: str, game_number: int, score: float) -> bool:
+    async def insert_test_score(self, user_id: str, username: str, game_number: int, score: float, round_data: str = "") -> bool:
         try:
             # We don't enforce UNIQUE on test_scores so we can keep spamming tests, 
             # or we can just append them. Let's just append everything.
             await self.db.execute(
-                "INSERT INTO test_scores (user_id, username, game_number, score) VALUES (?, ?, ?, ?)",
-                (str(user_id), username, game_number, score),
+                "INSERT INTO test_scores (user_id, username, game_number, score, round_data) VALUES (?, ?, ?, ?, ?)",
+                (str(user_id), username, game_number, score, round_data),
             )
             await self.db.commit()
             return True

@@ -352,40 +352,109 @@ export class GameEngine {
 
   _showResults() {
     const total = this.scores.reduce((a, b) => a + b, 0);
-    const totalStr = total.toFixed(2);
     const emojis = this.scores.map(scoreEmoji).join('');
+    const cheatEvents = getEvents();
 
-    const breakdownHtml = this.scores
-      .map((s, i) => `<span class="round-score-chip">${s.toFixed(1)}</span>`)
-      .join('');
+    const roundDataObj = this.rounds.map((r, i) => ({
+      t: [r.target.h, r.target.s, r.target.b],
+      g: [this.guesses[i].h, this.guesses[i].s, this.guesses[i].b],
+      s: this.scores[i]
+    }));
+    
+    // Convert to base64url so it safely passes through discord webhook
+    const roundDataB64 = btoa(JSON.stringify(roundDataObj))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+
+    // Fire network completion callback first
+    this.callbacks.onComplete(total, this.scores, emojis, cheatEvents, roundDataB64);
+
+    this._renderScorecard(total, roundDataObj);
+  }
+
+  showHistoricalScorecard(finalScore, replayData, isTest) {
+    this.container.innerHTML = '';
+    this._renderScorecard(finalScore, replayData, true);
+  }
+
+  _renderScorecard(totalScore, roundDataObj, isReplay = false) {
+    const totalStr = totalScore.toFixed(2);
+    const scoreNums = roundDataObj.map(r => r.s);
+    const emojis = scoreNums.map(scoreEmoji).join('');
+    
+    // Pick quip roughly based on average 50 max score
+    const quip = totalScore >= 45 ? "Okay, this is actually good. We hate admitting that." : 
+                 totalScore >= 40 ? "Pretty solid memory today." : 
+                 totalScore >= 30 ? "Passable, but we expect better." : 
+                 "Yikes. Let's pretend this didn't happen.";
+
+    // Determine the short date for the card "Apr 13"
+    const dateObj = new Date();
+    const shortDateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const fullDateLabel = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Generate 5 grid boxes
+    const gridHtml = roundDataObj.map(r => {
+      const targetCss = hsbToCss(r.t[0], r.t[1], r.t[2]);
+      const guessCss = hsbToCss(r.g[0], r.g[1], r.g[2]);
+      return `
+        <div class="result-color-box">
+           <div class="result-half result-guess" style="background:${guessCss};"></div>
+           <div class="result-half result-target" style="background:${targetCss}; clip-path: polygon(100% 0, 100% 100%, 0 100%);"></div>
+           <div class="result-label">${r.s.toFixed(2)}</div>
+        </div>
+      `;
+    }).join('');
 
     this.container.innerHTML = `
-      <div class="results">
-        <div class="results-total">${totalStr}</div>
-        <div class="results-max">/ 50</div>
-        <div class="results-emojis">${emojis}</div>
-        <div class="results-breakdown">${breakdownHtml}</div>
-        <div class="results-status submitting" id="results-status">Submitting score…</div>
-        <button class="share-btn" id="share-btn">Copy Score</button>
+      <div class="results" style="padding-top: 40px; justify-content: flex-start; gap: 20px;">
+        <div class="results-header" style="display: flex; justify-content: space-between; width: 100%; align-items: center; margin-bottom: -10px;">
+          <div class="results-title" style="font-size: 14px; color: #fff;">
+            <strong style="color: #fff">Daily</strong> <span style="color: #aaa">${fullDateLabel}</span>
+          </div>
+          <button class="results-close" aria-label="Close" style="background: rgba(255,255,255,0.1); border: none; width: 32px; height: 32px; border-radius: 50%; color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;">×</button>
+        </div>
+        
+        <div class="results-score-group" style="width: 100%; text-align: left;">
+          <span style="font-size: 80px; font-weight: 600; font-family: var(--font), sans-serif; letter-spacing: -3px; color: #fff; line-height: 1;">${totalStr}</span><span style="font-size: 80px; font-weight: 500; font-family: var(--font), sans-serif; letter-spacing: -3px; color: #888; line-height: 1;">/50</span>
+        </div>
+
+        <div class="results-quip" style="width: 100%; text-align: left; font-size: 15px; color: #ccc; margin-bottom: 8px;">${quip}</div>
+
+        <div class="result-colors">
+           ${gridHtml}
+        </div>
+
+        <div class="results-rank" id="results-status" style="width: 100%; text-align: left; font-weight: 600; color: #6BCB77; opacity: ${isReplay ? 0 : 1}; margin-bottom: 10px;">Submitting score...</div>
+
+        <div class="results-card">
+          <div class="card-line1" style="font-weight: 600; font-size: 15px; color: #fff; margin-bottom: 4px;">Dialed Daily — ${shortDateLabel}</div>
+          <div class="card-line2" style="font-size: 14px; color: #aaa; margin-bottom: 6px;">${totalStr}/50 <span style="letter-spacing: -2px; margin-left: 4px;">${emojis}</span></div>
+          <div class="card-line3" style="font-size: 13px; color: #666;">dialed.gg?d=1&s=${totalStr}</div>
+        </div>
+
+        <button class="share-btn" id="share-btn" style="background: #fff; color: #000; width: 100%; padding: 16px; border-radius: 20px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 10px; border: none;">Share your score</button>
+        <div class="leaderboard-link" style="font-size: 13px; color: #666; font-weight: 500; cursor: pointer;">Daily Leaderboard</div>
       </div>
     `;
 
-    // Share button: copy score text to clipboard
     document.getElementById('share-btn').addEventListener('click', () => {
-      const shareText = `Coloral Daily — ${todayLabel()}\n${totalStr}/50 ${emojis}`;
+      const shareText = \`Dialed Daily — ${shortDateLabel}\\n${totalStr}/50 ${emojis}\\ndialed.gg?d=1&s=${totalStr}\`;
       const btn = document.getElementById('share-btn');
       navigator.clipboard.writeText(shareText).then(() => {
-        btn.textContent = '✓ Copied!';
+        btn.textContent = 'Copied!';
         btn.classList.add('copied');
         setTimeout(() => {
-          btn.textContent = 'Copy Score';
+          btn.textContent = 'Share your score';
           btn.classList.remove('copied');
         }, 2000);
       });
     });
-
-    // Fire completion callback
-    const cheatEvents = getEvents();
-    this.callbacks.onComplete(total, this.scores, emojis, cheatEvents);
+    
+    document.querySelector('.results-close').addEventListener('click', () => {
+       window.location.reload();
+    });
   }
 }
+// EOF

@@ -84,7 +84,7 @@ function showIntro(username, onStart) {
 
 // ── Score Submission ─────────────────────────────────────────────────────────
 
-async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest) {
+async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundData) {
   const statusEl = document.getElementById('results-status');
 
   // Dev mode: skip API submission
@@ -107,6 +107,7 @@ async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, 
         totalScore: parseFloat(totalScore.toFixed(2)),
         cheatEvents,
         isTest, // passes test flag to vercel
+        roundData
       }),
     });
 
@@ -145,14 +146,35 @@ async function main() {
   const { user_id, username, token } = auth;
   const isTest = params.has('test') && params.get('test') === '1';
 
+  // Check if this is a historical replay link
+  let replayData = null;
+  let finalScore = 0;
+  if (params.has('replay') && params.has('score')) {
+    try {
+       // Decode base64url padding safely
+       const b64 = params.get('replay').replace(/-/g, '+').replace(/_/g, '/');
+       const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+       const raw = atob(padded);
+       replayData = JSON.parse(raw);
+       finalScore = parseFloat(params.get('score'));
+    } catch (e) {
+       console.error("Malformed replay data", e);
+    }
+  }
+
   // Show intro screen
   showIntro(username, () => {
     const engine = new GameEngine(container, {
-      onComplete: (totalScore, roundScores, emojis, cheatEvents) => {
-        submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest);
+      onComplete: (totalScore, roundScores, emojis, cheatEvents, roundDataB64) => {
+        submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundDataB64);
       },
     });
-    engine.start();
+
+    if (replayData && replayData.length > 0) {
+       engine.showHistoricalScorecard(finalScore, replayData, isTest);
+    } else {
+       engine.start();
+    }
   });
 }
 

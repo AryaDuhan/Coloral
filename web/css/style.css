@@ -73,7 +73,7 @@ main {
 /* ── Game Card ───────────────────────────────────────────────────────────────── */
 .card {
   width: 100%;
-  max-width: 640px;
+  max-width: 900px;
   aspect-ratio: 1 / 1;
   max-height: 90vh;
   background: var(--card-bg);
@@ -596,6 +596,56 @@ main {
 
 .results-status.success {
   color: #6BCB77;
+}
+
+/* ── New Scorecard Results ─────────────────────────────────────────────────── */
+.results-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.result-colors {
+  display: flex;
+  width: 100%;
+  height: 80px;
+  margin-top: 10px;
+  margin-bottom: 25px;
+}
+
+.result-color-box {
+  flex: 1;
+  position: relative;
+}
+
+.result-half {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.result-label {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  font-family: var(--font);
+}
+
+.results-card {
+  width: 100%;
+  background: #111;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #333;
+  text-align: left;
 }
 
 .results-status.submitting {

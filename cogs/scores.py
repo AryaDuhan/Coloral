@@ -152,7 +152,12 @@ class ScoresCog(commands.Cog, name="Scores"):
             cheat_count = int(parts[3])
             sig = parts[4]
             cheat_details = parts[5] if len(parts) > 5 else ""
-            is_test = (parts[-1] == "TEST")
+            is_test = "TEST" in parts
+            round_data = ""
+            for p in parts[5:]:
+                if p and p != "TEST" and ":" not in p:
+                    round_data = p
+                    break
         except (ValueError, IndexError):
             log.warning(f"Malformed Coloral webhook footer: {embed.footer.text}")
             return
@@ -173,7 +178,7 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         if is_test:
             # Handle Test Mode Submission
-            success = await db.insert_test_score(user_id, username, game_number, score)
+            success = await db.insert_test_score(user_id, username, game_number, score, round_data)
             if not success:
                 return
 
@@ -196,7 +201,8 @@ class ScoresCog(commands.Cog, name="Scores"):
 
                 reply_embed = discord.Embed(description=desc, color=0x3498DB) # Blue for test
                 try:
-                    await message.reply(embed=reply_embed)
+                    await message.delete()
+                    await message.channel.send(embed=reply_embed)
                 except discord.HTTPException:
                     pass
 
@@ -210,7 +216,7 @@ class ScoresCog(commands.Cog, name="Scores"):
             return
 
         # Record the score
-        success = await db.insert_score(user_id, username, game_number, score)
+        success = await db.insert_score(user_id, username, game_number, score, round_data)
         if not success:
             return
 
@@ -237,7 +243,8 @@ class ScoresCog(commands.Cog, name="Scores"):
 
             reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
             try:
-                await message.reply(embed=reply_embed)
+                await message.delete()
+                await message.channel.send(embed=reply_embed)
             except discord.HTTPException:
                 pass
 
