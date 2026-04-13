@@ -1,0 +1,13 @@
+{
+  "name": "coloral",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Color memory game — a dialed.gg clone",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "devDependencies": {
+    "vercel": "^39.0.0"
+  }
+}

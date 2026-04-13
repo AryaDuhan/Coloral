@@ -1,7 +1,18 @@
+"""
+ui.py — Persistent Discord UI views (Play Daily button + HMAC token generation).
+"""
+
 from datetime import datetime, date, timezone
 import discord
 import asyncio
 import logging
+import hmac
+import hashlib
+import base64
+import json
+import time
+
+from config import HMAC_SECRET, WEBSITE_URL
 
 log = logging.getLogger("dialed.ui")
 
@@ -19,6 +30,23 @@ def _today_str() -> str:
     return date.today().isoformat()
 
 
+def _generate_token(user_id: str, username: str) -> str:
+    """
+    Generate an HMAC-signed stateless token for website authentication.
+
+    Token format: base64url(json_payload).hex(hmac_sha256(encoded_payload, secret))
+    Payload: { user_id, username, exp (1 hour from now) }
+    """
+    payload = json.dumps({
+        "user_id": user_id,
+        "username": username,
+        "exp": int(time.time()) + 3600,  # 1-hour expiry
+    })
+    payload_b64 = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+    sig = hmac.new(HMAC_SECRET.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
 class PlayView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -26,10 +54,28 @@ class PlayView(discord.ui.View):
     @discord.ui.button(label="Play Daily", style=discord.ButtonStyle.success, emoji="▶️", custom_id="play_daily_btn")
     async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
+        username = interaction.user.display_name
         today = _today_str()
         session_key = (user_id, today)
 
-        # Send the play link
+        # If website is configured, generate a secure game link
+        if HMAC_SECRET and WEBSITE_URL:
+            token = _generate_token(user_id, username)
+            game_url = f"https://{WEBSITE_URL}/?token={token}"
+
+            try:
+                await interaction.response.send_message(
+                    f"🎮 **Let's go, {username}!**\n\n"
+                    f"Open your secure game link:\n"
+                    f"**[Play Coloral]({game_url})**\n\n"
+                    f"*This link expires in 1 hour and is unique to you.*",
+                    ephemeral=True,
+                )
+            except discord.errors.NotFound:
+                pass
+            return
+
+        # Fallback: no website configured, link to dialed.gg
         try:
             await interaction.response.send_message(
                 f"🎮 Let's go! Open the game here: **[dialed.gg](https://dialed.gg)**",

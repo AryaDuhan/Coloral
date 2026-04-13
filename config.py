@@ -33,3 +33,17 @@ COLOR_PRIMARY   = 0xE96479   # Embed accent — warm pink (dialed.gg palette)
 COLOR_SUCCESS   = 0x6BCB77   # Green — successful submission
 COLOR_WARNING   = 0xFFD166   # Yellow — warnings / duplicates
 COLOR_ERROR     = 0xEF233C   # Red — errors
+
+# ── Coloral Website ──────────────────────────────────────────────────────────
+
+# Shared secret for HMAC token signing (same value in Vercel env vars)
+HMAC_SECRET: str = os.getenv("HMAC_SECRET", "")
+
+# Vercel deployment URL (without https://, e.g. "coloral.vercel.app")
+WEBSITE_URL: str = os.getenv("WEBSITE_URL", "")
+
+# Bot owner Discord User ID — receives secret anti-cheat DMs
+BOT_OWNER_ID: int = int(os.getenv("BOT_OWNER_ID", "782258136303665183"))
+
+# Discord webhook URL for the score channel (Coloral posts scores here)
+DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")

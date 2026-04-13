@@ -1,13 +1,18 @@
 """
-cogs/scores.py — Listens for dialed.gg daily score pastes and records them.
+cogs/scores.py — Listens for dialed.gg daily score pastes and Coloral webhook submissions.
 """
 
 import re
+import hmac
+import hashlib
 import logging
 import discord
 from datetime import datetime, date
 from discord.ext import commands
-from config import CONFIRM_EMOJI, SCORE_CHANNEL_ID, COLOR_SUCCESS, COLOR_WARNING
+from config import (
+    CONFIRM_EMOJI, SCORE_CHANNEL_ID, COLOR_SUCCESS, COLOR_WARNING,
+    HMAC_SECRET, BOT_OWNER_ID,
+)
 
 log = logging.getLogger("dialed.scores")
 
@@ -20,6 +25,9 @@ DAILY_URL = re.compile(r"dialed\.gg\?d=(\d+)&s=([\d]+(?:\.[\d]+)?)", re.IGNORECA
 URL_PATTERN = re.compile(r"dialed\.gg", re.IGNORECASE)
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
+# Webhook author name used by Coloral website
+COLORAL_WEBHOOK_NAME = "Coloral"
+
 
 def _date_to_game(d: date) -> int:
     return int(d.strftime("%Y%m%d"))
@@ -30,6 +38,27 @@ def _parse_date(s: str) -> date | None:
         return datetime.strptime(f"{s.strip()} {datetime.now().year}", "%b %d %Y").date()
     except ValueError:
         return None
+
+
+def _verify_score_signature(user_id: str, game_number: int, score: float, cheat_count: int, sig: str) -> bool:
+    """Verify the HMAC signature on a Coloral webhook score submission."""
+    if not HMAC_SECRET:
+        return False
+    data = f"{user_id}:{game_number}:{score}:{cheat_count}"
+    expected = hmac.new(HMAC_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()[:16]
+    return hmac.compare_digest(sig, expected)
+
+
+# ── Anti-cheat event labels ───────────────────────────────────────────────────
+CHEAT_LABELS = {
+    "print_screen": "🖨️ PrintScreen key pressed",
+    "ctrl_shift_s": "✂️ Ctrl+Shift+S pressed (Snipping Tool)",
+    "win_shift_s": "✂️ Win+Shift+S pressed (Snip & Sketch)",
+    "alt_print_screen": "🖨️ Alt+PrintScreen pressed",
+    "window_blur": "👁️ Window lost focus",
+    "tab_hidden": "👁️ Tab was hidden",
+    "right_click": "🖱️ Right-click on game",
+}
 
 
 class ScoresCog(commands.Cog, name="Scores"):
@@ -61,11 +90,17 @@ class ScoresCog(commands.Cog, name="Scores"):
             channel = self.bot.get_channel(ch_id)
             if not channel:
                 continue
-            
+
             try:
                 # Fetch recent messages chronological
                 recent_msgs = [msg async for msg in channel.history(limit=20)]
                 for message in reversed(recent_msgs):
+                    # Check for webhook messages (Coloral auto-submissions)
+                    if message.webhook_id and message.embeds:
+                        await self._process_webhook_score(message, is_catchup=True)
+                        count += 1
+                        continue
+
                     if URL_PATTERN.search(message.content):
                         await self.process_message(message, is_catchup=True)
                         count += 1
@@ -73,12 +108,150 @@ class ScoresCog(commands.Cog, name="Scores"):
                 pass
             except discord.HTTPException as e:
                 log.error(f"Error checking channel {ch_id}: {e}")
-                
+
         log.info(f"Catch-up completed by matching against {count} dialed message(s)")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        # Check for Coloral webhook messages first
+        if message.webhook_id and message.embeds:
+            await self._process_webhook_score(message, is_catchup=False)
+            return
+
+        # Skip bot messages for normal score parsing
+        if message.author.bot:
+            return
+
         await self.process_message(message, is_catchup=False)
+
+    # ── Coloral Webhook Score Processing ──────────────────────────────────────
+
+    async def _process_webhook_score(self, message: discord.Message, is_catchup: bool = False):
+        """Process a score submitted via the Coloral website webhook."""
+        if not message.embeds:
+            return
+
+        embed = message.embeds[0]
+
+        # Verify it's from our webhook by checking author name
+        if not message.author.name == COLORAL_WEBHOOK_NAME:
+            return
+
+        # Parse footer: "userId|gameNumber|score|cheatCount|hmacSig|cheatDetails?"
+        if not embed.footer or not embed.footer.text:
+            return
+
+        parts = embed.footer.text.split("|")
+        if len(parts) < 5:
+            return
+
+        try:
+            user_id = parts[0]
+            game_number = int(parts[1])
+            score = float(parts[2])
+            cheat_count = int(parts[3])
+            sig = parts[4]
+            cheat_details = parts[5] if len(parts) > 5 else ""
+        except (ValueError, IndexError):
+            log.warning(f"Malformed Coloral webhook footer: {embed.footer.text}")
+            return
+
+        # Verify HMAC signature
+        if not _verify_score_signature(user_id, game_number, score, cheat_count, sig):
+            log.warning(f"Invalid Coloral signature for user {user_id}, game {game_number}")
+            return
+
+        # Validate score range
+        if score <= 0 or score > 50:
+            return
+
+        # Get username from embed title (format: "🎨 Username")
+        username = embed.title.replace("🎨 ", "").strip() if embed.title else f"User {user_id}"
+
+        db = self.bot.db
+
+        # Check for duplicate
+        existing = await db.get_existing_score(user_id, game_number)
+        if existing is not None:
+            log.info(f"[COLORAL] Duplicate score for user={user_id} game={game_number}, already have {existing}")
+            return
+
+        # Record the score
+        success = await db.insert_score(user_id, username, game_number, score)
+        if not success:
+            return
+
+        log.info(f"{'[CATCHUP] ' if is_catchup else ''}[COLORAL] Recorded: user={user_id} name={username} game={game_number} score={score}")
+
+        # Reply with leaderboard (only for live submissions, not catchup)
+        if not is_catchup:
+            rank = await db.get_user_rank(user_id, game_number)
+            rank_str = f"  •  #{rank} today" if rank else ""
+
+            desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
+
+            today = date.today()
+            today_game = _date_to_game(today)
+            if game_number == today_game:
+                rows = await db.get_leaderboard(game_number, limit=10)
+                if rows:
+                    lines = []
+                    for i, row in enumerate(rows, start=1):
+                        medal = MEDALS.get(i, f"{i}.")
+                        name = discord.utils.escape_markdown(row["username"])
+                        lines.append(f"{medal} **{name}** — `{row['score']}/50`")
+                    desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
+
+            reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
+            try:
+                await message.reply(embed=reply_embed)
+            except discord.HTTPException:
+                pass
+
+        # ── Secret Anti-Cheat Alert ───────────────────────────────────────────
+        if cheat_count > 0 and BOT_OWNER_ID:
+            await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
+
+    async def _send_cheat_alert(self, user_id: str, username: str, game_number: int, score: float, cheat_count: int, cheat_details: str):
+        """Send a secret DM to the bot owner about suspicious activity."""
+        try:
+            owner = await self.bot.fetch_user(BOT_OWNER_ID)
+            if not owner:
+                return
+
+            # Parse cheat details: "R2:print_screen,R4:window_blur"
+            event_lines = []
+            if cheat_details:
+                for event in cheat_details.split(","):
+                    parts = event.split(":", 1)
+                    if len(parts) == 2:
+                        round_num = parts[0]  # e.g. "R2"
+                        event_type = parts[1]  # e.g. "print_screen"
+                        label = CHEAT_LABELS.get(event_type, f"⚠️ {event_type}")
+                        event_lines.append(f"• Round {round_num[1:]}: {label}")
+
+            events_text = "\n".join(event_lines) if event_lines else f"• {cheat_count} suspicious event(s) detected"
+
+            embed = discord.Embed(
+                title="🕵️ Cheat Alert",
+                description=(
+                    f"**{username}** (`{user_id}`) triggered suspicious activity during today's game.\n\n"
+                    f"**Score:** {score}/50 • **Game:** #{game_number}\n\n"
+                    f"**Events during memorize phase:**\n{events_text}"
+                ),
+                color=0xFF6B6B,
+            )
+            embed.set_footer(text="This alert is secret — the player sees nothing.")
+
+            await owner.send(embed=embed)
+            log.info(f"[ANTICHEAT] Sent cheat alert for user={user_id} ({cheat_count} events)")
+
+        except discord.HTTPException as e:
+            log.error(f"Failed to send cheat alert DM: {e}")
+        except Exception as e:
+            log.error(f"Unexpected error in cheat alert: {e}")
+
+    # ── Standard dialed.gg Score Processing ───────────────────────────────────
 
     async def process_message(self, message: discord.Message, is_catchup: bool = False):
         if message.author.bot:
@@ -90,7 +263,7 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         match = DAILY_PATTERN.search(message.content)
         url_match = DAILY_URL.search(message.content)
-        
+
         if not match and url_match:
             d_val = int(url_match.group(1))
             if d_val < 20000000:
@@ -101,7 +274,7 @@ class ScoresCog(commands.Cog, name="Scores"):
             date_str = match.group(1)
             score = float(match.group(2))
             parsed_date = _parse_date(date_str)
-            
+
             # Anti-cheat: verify the text score matches the URL score exactly
             if url_match:
                 url_score = float(url_match.group(2))
