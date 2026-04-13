@@ -23,21 +23,36 @@ trap 'echo ""; echo "🛑  Caught Ctrl+C — shutting down."; exit 0' INT TERM
 echo "📱 Starting Dialed bot (Phone Mode)..."
 
 while true; do
-    # 7h timeout = safety net in case the bot freezes
     timeout 7h python bot.py
     EXIT_CODE=$?
 
-    # Exit code 130 = Ctrl+C was pressed (SIGINT), so stop looping
+    # 42 = explicit restart request from lifecycle.py
+    if [ $EXIT_CODE -eq 42 ]; then
+        echo ""
+        echo "🔄  Restarting (requested by bot)..."
+        sleep 2
+        continue
+    fi
+
+    # 130 = SIGINT/Ctrl+C sent directly to bash
     if [ $EXIT_CODE -eq 130 ]; then
-        echo "🛑  Stopped."
+        echo ""
+        echo "🛑  Stopped via Ctrl+C."
+        exit 0
+    fi
+
+    # 0 = Clean shutdown. Typically meaning python intercepted Ctrl+C directly inside discord.py 
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo ""
+        echo "🛑  Clean shutdown (Code 0) — Exiting loop."
         exit 0
     fi
 
     echo ""
     if [ $EXIT_CODE -eq 124 ]; then
-        echo "🔒  Bot was unresponsive for 7 hours — force-killed by safety net."
+        echo "🔒  Bot froze — force-killed by safety net."
     else
-        echo "⚠️  Bot exited (code $EXIT_CODE)."
+        echo "⚠️  Bot crashed (code $EXIT_CODE)."
     fi
     echo "🔄  Restarting in 5 seconds... (Ctrl+C to stop)"
     sleep 5

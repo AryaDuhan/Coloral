@@ -45,8 +45,8 @@ async def shutdown_and_restart(bot):
     # Small delay to ensure messages are delivered
     await asyncio.sleep(1)
     await bot.close()
-    # Exit cleanly at OS level — phone_start.sh's while-true loop will restart us
-    os._exit(0)
+    # Exit cleanly at OS level with code 42 — phone_start.sh intercepts this to restart
+    os._exit(42)
 
 
 class LifecycleCog(commands.Cog, name="Lifecycle"):
