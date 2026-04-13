@@ -4,6 +4,7 @@
 
 import { initAntiCheat } from './anticheat.js';
 import { GameEngine } from './game.js';
+import { initAudio } from './audio.js';
 
 const container = document.getElementById('phase-container');
 
@@ -61,24 +62,34 @@ function showIntro(username, onStart) {
   container.innerHTML = `
     <div class="intro">
       <h1>color</h1>
-      <p>We'll show you five colors, then you'll try to recreate them from memory.</p>
-      <p>Five rounds. 0–10 per round. Max 50.</p>
+      <p>Humans can't reliably recall colors. This is a simple game to see how good (or bad) you are at it.</p>
+      <p>We'll show you five colors, then you'll try and recreate them.</p>
       <div class="player-name">Playing as ${username}</div>
-      <button class="action-btn" id="start-btn" aria-label="Start game">▶</button>
+      <button class="action-btn" id="start-btn" aria-label="Start game">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 22C16.9706 22 21 17.9706 21 13C21 8.02944 16.9706 4 12 4C7.02944 4 3 8.02944 3 13C3 17.9706 7.02944 22 12 22Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
     </div>
   `;
 
-  document.getElementById('start-btn').addEventListener('click', onStart);
+  const startBtn = document.getElementById('start-btn');
+  startBtn.addEventListener('click', async () => {
+    // Show brief loading state while audio fetches/decodes
+    startBtn.style.opacity = '0.5';
+    startBtn.style.pointerEvents = 'none';
+    
+    await initAudio(); // Must resolve before starting
+    onStart();
+  });
 }
 
 // ── Score Submission ─────────────────────────────────────────────────────────
 
-async function submitScore(token, totalScore, roundScores, emojis, cheatEvents) {
+async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest) {
   const statusEl = document.getElementById('results-status');
 
   // Dev mode: skip API submission
   if (DEV_MODE) {
-    console.log('%c[DEV] Score submission skipped', 'color: #FFD166', { totalScore, roundScores, cheatEvents });
+    console.log('%c[DEV] Score submission skipped', 'color: #FFD166', { totalScore, roundScores, cheatEvents, isTest });
     if (statusEl) {
       statusEl.textContent = '✓ Score logged to console (dev mode)';
       statusEl.className = 'results-status success';
@@ -95,12 +106,13 @@ async function submitScore(token, totalScore, roundScores, emojis, cheatEvents) 
         scores: roundScores,
         totalScore: parseFloat(totalScore.toFixed(2)),
         cheatEvents,
+        isTest, // passes test flag to vercel
       }),
     });
 
     if (res.ok) {
       if (statusEl) {
-        statusEl.textContent = '✓ Score submitted to Discord!';
+        statusEl.textContent = isTest ? '🧪 Test score sent!' : '✓ Score submitted to Discord!';
         statusEl.className = 'results-status success';
       }
     } else {
@@ -131,12 +143,13 @@ async function main() {
   if (!auth) return;
 
   const { user_id, username, token } = auth;
+  const isTest = params.has('test') && params.get('test') === '1';
 
   // Show intro screen
   showIntro(username, () => {
     const engine = new GameEngine(container, {
       onComplete: (totalScore, roundScores, emojis, cheatEvents) => {
-        submitScore(token, totalScore, roundScores, emojis, cheatEvents);
+        submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest);
       },
     });
     engine.start();

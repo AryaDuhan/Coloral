@@ -51,34 +51,18 @@ class PlayView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Play Daily", style=discord.ButtonStyle.success, emoji="▶️", custom_id="play_daily_btn")
+    @discord.ui.button(label="Play Daily", style=discord.ButtonStyle.secondary, emoji="▶️", custom_id="play_daily_btn")
     async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         username = interaction.user.display_name
         today = _today_str()
         session_key = (user_id, today)
 
-        # If website is configured, generate a secure game link
-        if HMAC_SECRET and WEBSITE_URL:
-            token = _generate_token(user_id, username)
-            game_url = f"https://{WEBSITE_URL}/?token={token}"
-
-            try:
-                await interaction.response.send_message(
-                    f"🎮 **Let's go, {username}!**\n\n"
-                    f"Open your secure game link:\n"
-                    f"**[Play Coloral]({game_url})**\n\n"
-                    f"*This link expires in 1 hour and is unique to you.*",
-                    ephemeral=True,
-                )
-            except discord.errors.NotFound:
-                pass
-            return
-
-        # Fallback: no website configured, link to dialed.gg
+        # Main button now points to the real dialed.gg ALWAYS
         try:
             await interaction.response.send_message(
-                f"🎮 Let's go! Open the game here: **[dialed.gg](https://dialed.gg)**",
+                f"🎮 Let's go! Open the game here: **[dialed.gg](https://dialed.gg)**\n"
+                f"*Paste your score back in this channel when you finish.*",
                 ephemeral=True,
             )
         except discord.errors.NotFound:
@@ -117,3 +101,31 @@ class PlayView(discord.ui.View):
             )
         except (discord.Forbidden, discord.HTTPException) as e:
             log.error(f"Failed to send play reminder to {user_id}: {e}")
+
+    @discord.ui.button(label="Test Webhook Clone", style=discord.ButtonStyle.success, emoji="🧪", custom_id="test_daily_btn")
+    async def test_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        username = interaction.user.display_name
+
+        if HMAC_SECRET and WEBSITE_URL:
+            token = _generate_token(user_id, username)
+            game_url = f"https://{WEBSITE_URL}/?token={token}&test=1"
+
+            try:
+                await interaction.response.send_message(
+                    f"🧪 **Test Mode Active!**\n\n"
+                    f"Open your secure test link:\n"
+                    f"**[Test Coloral Clone]({game_url})**\n\n"
+                    f"*Scores from this link will be sent to the webhook but saved to a separate Test Leaderboard.*",
+                    ephemeral=True,
+                )
+            except discord.errors.NotFound:
+                pass
+        else:
+            try:
+                await interaction.response.send_message(
+                    f"⚠️ The `HMAC_SECRET` and `WEBSITE_URL` environment variables are not configured.",
+                    ephemeral=True,
+                )
+            except discord.errors.NotFound:
+                pass

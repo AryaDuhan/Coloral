@@ -146,11 +146,15 @@ function ciede2000(lab1, lab2) {
 
 // ── Scoring ────────────────────────────────────────────────────────────────────
 
-/** Map CIEDE2000 ΔE to a 0-10 game score via S-curve */
+/**
+ * Map CIEDE2000 ΔE to a 0-10 game score via exponential decay,
+ * ensuring that a perfect match (dE = 0) perfectly yields 10.00.
+ * Matches dialed.gg generous decay formula closely.
+ */
 function deltaEToScore(dE) {
-  const midpoint = 25.25;
-  const k = 0.18;
-  return 10 / (1 + Math.exp(k * (dE - midpoint)));
+  // exponential decay: high score dropoff to ~25 dE, then tails off
+  const score = 10 * Math.exp(-Math.pow(dE/35, 1.35));
+  return Math.max(0, parseFloat(score.toFixed(2)));
 }
 
 /** Absolute hue difference in degrees (wraps around 360°) */
@@ -166,6 +170,11 @@ function hueDiff(h1, h2) {
  * @returns {number} Score from 0.00 to 10.00
  */
 export function scoreRound(target, guess) {
+  // If absolute match, explicitly return 10
+  if (target.h === guess.h && target.s === guess.s && target.b === guess.b) {
+    return 10.00;
+  }
+
   const targetLab = hsbToLab(target.h, target.s, target.b);
   const guessLab = hsbToLab(guess.h, guess.s, guess.b);
 
@@ -176,13 +185,6 @@ export function scoreRound(target, guess) {
   const minSat = Math.min(target.s, guess.s);
   // Saturation factor: fades to 0 below 30% (hue becomes meaningless on greys)
   const satFactor = minSat >= 30 ? 1 : minSat / 30;
-
-  // Hue recovery: if hue is close (< 25°), recover some lost points
-  if (hDiff < 25) {
-    const hueAccuracy = 1 - hDiff / 25;
-    const lostPoints = 10 - score;
-    score += 0.25 * lostPoints * hueAccuracy * satFactor;
-  }
 
   // Hue penalty: if hue is far off (> 30°), penalize on vivid colors
   if (hDiff > 30) {

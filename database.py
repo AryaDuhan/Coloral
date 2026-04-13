@@ -32,6 +32,19 @@ class Database:
         """)
         await self.db.execute("CREATE INDEX IF NOT EXISTS idx_game ON scores(game_number)")
 
+        # Dedicated test_scores table for testing logic without polluting stats
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS test_scores (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     TEXT    NOT NULL,
+                username    TEXT    NOT NULL,
+                game_number INTEGER NOT NULL,
+                score       REAL    NOT NULL,
+                submitted_at TEXT   NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        await self.db.execute("CREATE INDEX IF NOT EXISTS idx_game_test ON test_scores(game_number)")
+
         # Guild settings (reminder channel per server)
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS guild_settings (
@@ -137,6 +150,46 @@ class Database:
             (game_number, limit),
         ) as cur:
             return await cur.fetchall()
+
+    # ── Test Scores (Webhook Testing) ─────────────────────────────────────────
+
+    async def insert_test_score(self, user_id: str, username: str, game_number: int, score: float) -> bool:
+        try:
+            # We don't enforce UNIQUE on test_scores so we can keep spamming tests, 
+            # or we can just append them. Let's just append everything.
+            await self.db.execute(
+                "INSERT INTO test_scores (user_id, username, game_number, score) VALUES (?, ?, ?, ?)",
+                (str(user_id), username, game_number, score),
+            )
+            await self.db.commit()
+            return True
+        except aiosqlite.IntegrityError:
+            return False
+
+    async def get_test_leaderboard(self, game_number: int, limit: int = 10):
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(
+            "SELECT username, score FROM test_scores WHERE game_number = ? ORDER BY score DESC LIMIT ?",
+            (game_number, limit),
+        ) as cur:
+            return await cur.fetchall()
+
+    async def get_user_test_rank(self, user_id: str, game_number: int) -> Optional[int]:
+        # Getting rank based on the best test score of this user
+        async with self.db.execute(
+            """SELECT COUNT(*) + 1 FROM 
+                (SELECT user_id, MAX(score) as best FROM test_scores WHERE game_number = ? GROUP BY user_id) 
+               WHERE best > (SELECT MAX(score) FROM test_scores WHERE user_id = ? AND game_number = ?)""",
+            (game_number, str(user_id), game_number),
+        ) as cur:
+            row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def clear_test_scores(self) -> int:
+        async with self.db.execute("DELETE FROM test_scores") as cur:
+            count = cur.rowcount
+        await self.db.commit()
+        return count
 
     async def get_current_game_number(self) -> Optional[int]:
         async with self.db.execute("SELECT MAX(game_number) FROM scores") as cur:

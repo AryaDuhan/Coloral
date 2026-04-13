@@ -152,6 +152,7 @@ class ScoresCog(commands.Cog, name="Scores"):
             cheat_count = int(parts[3])
             sig = parts[4]
             cheat_details = parts[5] if len(parts) > 5 else ""
+            is_test = (parts[-1] == "TEST")
         except (ValueError, IndexError):
             log.warning(f"Malformed Coloral webhook footer: {embed.footer.text}")
             return
@@ -166,10 +167,42 @@ class ScoresCog(commands.Cog, name="Scores"):
             return
 
         # Get username from embed title (format: "🎨 Username")
-        username = embed.title.replace("🎨 ", "").strip() if embed.title else f"User {user_id}"
+        username = embed.title.replace("🎨 ", "").replace("🧪 [TEST] ", "").strip() if embed.title else f"User {user_id}"
 
         db = self.bot.db
 
+        if is_test:
+            # Handle Test Mode Submission
+            success = await db.insert_test_score(user_id, username, game_number, score)
+            if not success:
+                return
+
+            log.info(f"[TEST] Recorded: user={user_id} name={username} game={game_number} score={score}")
+
+            if not is_catchup:
+                rank = await db.get_user_test_rank(user_id, game_number)
+                rank_str = f"  •  #{rank} in testing" if rank else ""
+
+                desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
+
+                rows = await db.get_test_leaderboard(game_number, limit=10)
+                if rows:
+                    lines = []
+                    for i, row in enumerate(rows, start=1):
+                        medal = MEDALS.get(i, f"{i}.")
+                        name = discord.utils.escape_markdown(row["username"])
+                        lines.append(f"{medal} **{name}** — `{row['score']}/50`")
+                    desc += "\n\n**🧪 Test Leaderboard**\n" + "\n".join(lines)
+
+                reply_embed = discord.Embed(description=desc, color=0x3498DB) # Blue for test
+                try:
+                    await message.reply(embed=reply_embed)
+                except discord.HTTPException:
+                    pass
+
+            return # Stop processing, avoid inserting into real db
+
+        # ── Normal Mode Submission ──
         # Check for duplicate
         existing = await db.get_existing_score(user_id, game_number)
         if existing is not None:
@@ -351,6 +384,15 @@ class ScoresCog(commands.Cog, name="Scores"):
         await message.reply(embed=embed)
         log.info(f"{'[CATCHUP] ' if is_catchup else ''}Recorded: user={user_id} name={username} game={game_number} score={score}")
 
+
+    @discord.app_commands.command(name="cleartest", description="Clear all scores from the Test Leaderboard")
+    async def clear_test_cmd(self, interaction: discord.Interaction):
+        if str(interaction.user.id) != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ This command is restricted.", ephemeral=True)
+            return
+
+        count = await self.bot.db.clear_test_scores()
+        await interaction.response.send_message(f"🧹 Cleared {count} records from the Test Leaderboard.", ephemeral=True)
 
 def _score_bar(score: float, max_score: float = 50.0, length: int = 20) -> str:
     filled = round((score / max_score) * length)

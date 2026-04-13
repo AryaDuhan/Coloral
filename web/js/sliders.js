@@ -58,11 +58,11 @@ export function createSliders(container, onChange) {
     // Saturation track: grey → fully saturated at current hue & brightness
     const greyCol = hsbToCss(h, 0, b);
     const fullSatCol = hsbToCss(h, 100, b);
-    els.s.track.style.background = `linear-gradient(to bottom, ${fullSatCol}, ${greyCol})`;
+    els.s.track.style.backgroundImage = `linear-gradient(to bottom, ${fullSatCol}, ${greyCol})`;
 
     // Brightness track: current hue+sat → black
     const brightCol = hsbToCss(h, s, 100);
-    els.b.track.style.background = `linear-gradient(to bottom, ${brightCol}, #000)`;
+    els.b.track.style.backgroundImage = `linear-gradient(to bottom, ${brightCol}, #000)`;
   }
 
   // ── Thumb Positioning ──────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  const { token, scores, totalScore, cheatEvents } = req.body;
+  const { token, scores, totalScore, cheatEvents, isTest } = req.body;
 
   if (!token || !scores || totalScore == null) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -101,9 +101,12 @@ module.exports = async (req, res) => {
 
   // ── Post to Discord Webhook ──────────────────────────────────────────────
   // The embed footer carries verification data for the bot to parse.
-  // Format: userId|gameNumber|score|cheatCount|hmacSig|cheatDetails
+  // Format: userId|gameNumber|score|cheatCount|hmacSig|cheatDetails|TEST?
   const footerParts = [userId, gameNumber, roundedTotal, cheatCount, scoreSig];
   if (cheatDetails) footerParts.push(cheatDetails);
+  else if (isTest) footerParts.push(""); // pad if missing and we need to append test
+  
+  if (isTest) footerParts.push("TEST");
 
   // Pick embed color based on score
   let embedColor = 0x6BCB77; // green
@@ -111,12 +114,13 @@ module.exports = async (req, res) => {
   else if (roundedTotal < 35) embedColor = 0xFFD166; // yellow
 
   const scoreBar = scores.map((s) => `\`${s.toFixed(1)}\``).join('  ');
+  const displayTitle = isTest ? `🧪 [TEST] ${username}` : `🎨 ${username}`;
 
   const webhookPayload = {
     username: 'Coloral',
     embeds: [
       {
-        title: `🎨 ${username}`,
+        title: displayTitle,
         description: `**Dialed Daily** — ${dateLabel}\n**${roundedTotal}/50** ${emojis}\n\n${scoreBar}`,
         color: embedColor,
         footer: {
