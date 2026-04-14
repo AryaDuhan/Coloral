@@ -141,3 +141,25 @@ export function playDing(score) {
   osc.start(t);
   osc.stop(t + 0.6);
 }
+
+/** Satisfying small mechanical click for slider dragging */
+export function playSliderTick(intensity = 1.0) {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  // A very short, crisp, high-frequency ping removes the "bassy" feel
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1800, t);
+  osc.frequency.exponentialRampToValueAtTime(600, t + 0.02);
+
+  // Extremely tight envelope (~15ms)
+  gain.gain.setValueAtTime(0.2 * intensity, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.02);
+}

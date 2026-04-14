@@ -69,6 +69,7 @@ function showIntro(username, onStart) {
       <button class="action-btn" id="start-btn" aria-label="Start game">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 22C16.9706 22 21 17.9706 21 13C21 8.02944 16.9706 4 12 4C7.02944 4 3 8.02944 3 13C3 17.9706 7.02944 22 12 22Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
+      <button id="intro-leaderboard-btn" style="margin-top: 20px; background: none; border: none; color: #666; font-size: 13px; text-decoration: underline; cursor: pointer;">View Daily Leaderboard</button>
     </div>
   `;
 
@@ -80,6 +81,40 @@ function showIntro(username, onStart) {
     
     await initAudio(); // Must resolve before starting
     onStart();
+  });
+
+  const lbBtn = document.getElementById('intro-leaderboard-btn');
+  lbBtn.addEventListener('click', async () => {
+    lbBtn.textContent = 'Loading...';
+    try {
+      const res = await fetch('/leaderboard.json?t=' + Date.now());
+      if (!res.ok) throw new Error('Failed to load');
+      const data = await res.json();
+      
+      let html = '<div style="width: 100%; max-width: 300px; margin: 0 auto; text-align: left; background: #111; padding: 20px; border-radius: 12px; border: 1px solid #333;">';
+      html += '<div style="font-weight: 600; font-size: 16px; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px;">Top Scores Today</div>';
+      
+      if (data.scores && data.scores.length > 0) {
+        data.scores.forEach((s, i) => {
+          const rankStr = i === 0 ? '👑' : `#${i+1}`;
+          html += `<div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 15px;">
+            <span style="color: #ccc;">${rankStr} ${s.username}</span>
+            <span style="color: #fff; font-weight: 600;">${s.total_score.toFixed(2)}</span>
+          </div>`;
+        });
+      } else {
+        html += '<div style="color: #aaa; font-size: 14px;">No scores yet today. Be the first!</div>';
+      }
+      html += '<button id="lb-back-btn" style="margin-top: 16px; width: 100%; padding: 12px; border-radius: 20px; border: none; background: #fff; color: #000; font-weight: 600; cursor: pointer;">Back to start</button></div>';
+      
+      document.querySelector('.intro').innerHTML = html;
+      document.getElementById('lb-back-btn').addEventListener('click', () => {
+         showIntro(username, onStart);
+      });
+    } catch(e) {
+      lbBtn.textContent = 'Failed to load';
+      setTimeout(() => lbBtn.textContent = 'View Daily Leaderboard', 2000);
+    }
   });
 }
 

@@ -203,14 +203,14 @@ export class GameEngine {
         <div class="sliders-panel" id="sliders-panel"></div>
         <div class="color-preview" id="color-preview">
           <span class="overlay-label round-label" id="recreate-round" style="color: rgba(0,0,0,0.5)">${this.round + 1} / ${ROUNDS}</span>
-          <span class="preview-hsb" id="preview-hsb"></span>
+          <span class="brand-label" id="recreate-brand" style="color: rgba(0,0,0,0.5)">Colorle</span>
           <button class="submit-btn" id="submit-btn" aria-label="Submit guess"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.75 5.25037L18.0332 5.47093C18.1062 5.70832 18.292 5.89416 18.5294 5.9672L18.75 5.25037ZM11.4697 11.47C11.1768 11.7629 11.1768 12.2378 11.4697 12.5307C11.7626 12.8236 12.2374 12.8236 12.5303 12.5307L11.4697 11.47ZM12.013 16.5003C9.52054 16.5003 7.5 14.4797 7.5 11.9873H6C6 15.3082 8.69211 18.0003 12.013 18.0003V16.5003ZM7.5 11.9873C7.5 9.79277 9.06706 7.96265 11.1435 7.55779L10.8565 6.08552C8.08896 6.62511 6 9.06141 6 11.9873H7.5ZM16.4425 12.8568C16.0376 14.9333 14.2075 16.5003 12.013 16.5003V18.0003C14.9388 18.0003 17.3751 15.9114 17.9147 13.1439L16.4425 12.8568ZM20.5 12.0004C20.5 16.6948 16.6944 20.5004 12 20.5004V22.0004C17.5228 22.0004 22 17.5232 22 12.0004H20.5ZM12 20.5004C7.30558 20.5004 3.5 16.6948 3.5 12.0004H2C2 17.5232 6.47715 22.0004 12 22.0004V20.5004ZM3.5 12.0004C3.5 7.30595 7.30558 3.50037 12 3.50037V2.00037C6.47715 2.00037 2 6.47752 2 12.0004H3.5Z" fill="currentColor"/></svg></button>
         </div>
       </div>
     `;
 
     const preview = document.getElementById('color-preview');
-    const hsbLabel = document.getElementById('preview-hsb');
+    const brandLabel = document.getElementById('recreate-brand');
     const submitBtn = document.getElementById('submit-btn');
     const slidersPanel = document.getElementById('sliders-panel');
     const roundLabel = document.getElementById('recreate-round');
@@ -220,8 +220,7 @@ export class GameEngine {
       const css = hsbToCss(h, s, b);
       const textCol = getTextColor(h, s, b);
       preview.style.backgroundColor = css;
-      // Intentionally not displaying H S B text during guessing
-      hsbLabel.style.color = textCol;
+      brandLabel.style.color = textCol;
       roundLabel.style.color = textCol;
       submitBtn.style.borderColor = textCol.replace('0.7', '0.2');
     };
@@ -437,27 +436,49 @@ export class GameEngine {
         <div class="results-card">
           <div class="card-line1" style="font-weight: 600; font-size: 15px; color: #fff; margin-bottom: 4px;">Dialed Daily — ${shortDateLabel}</div>
           <div class="card-line2" style="font-size: 14px; color: #aaa; margin-bottom: 6px;">${totalStr}/50 <span style="letter-spacing: -2px; margin-left: 4px;">${emojis}</span></div>
-          <div class="card-line3" style="font-size: 13px; color: #666;">dialed.gg?d=${gameNumber}&s=${totalStr}</div>
         </div>
 
-        <button class="share-btn" id="share-btn" style="background: #fff; color: #000; width: 100%; padding: 16px; border-radius: 20px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 10px; border: none;">Share your score</button>
-        <div class="leaderboard-link" style="font-size: 13px; color: #666; font-weight: 500; cursor: pointer;">Daily Leaderboard</div>
+        <button class="leaderboard-btn" id="leaderboard-btn" style="background: #111; color: #fff; width: 100%; border: 1px solid #333; padding: 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px;">View Daily Leaderboard</button>
       </div>
     `;
 
-    document.getElementById('share-btn').addEventListener('click', () => {
-      const shareText = "Dialed Daily \u2014 " + shortDateLabel + "\n" + totalStr + "/50 " + emojis + "\ndialed.gg?d=" + gameNumber + "&s=" + totalStr;
-      const btn = document.getElementById('share-btn');
-      navigator.clipboard.writeText(shareText).then(() => {
-        btn.textContent = 'Copied!';
-        btn.classList.add('copied');
+    document.getElementById('leaderboard-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('leaderboard-btn');
+      const card = document.querySelector('.results-card');
+      
+      btn.textContent = 'Loading...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/leaderboard.json?t=' + Date.now());
+        if (!res.ok) throw new Error('Failed to load');
+        const data = await res.json();
+        
+        let html = '<div style="font-weight: 600; font-size: 15px; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px;">Top Scores Today</div>';
+        
+        if (data.scores && data.scores.length > 0) {
+          data.scores.forEach((s, i) => {
+            const rankStr = i === 0 ? '👑' : `#${i+1}`;
+            html += `<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px;">
+              <span style="color: #ccc;">${rankStr} ${s.username}</span>
+              <span style="color: #fff; font-weight: 600;">${s.total_score.toFixed(2)}</span>
+            </div>`;
+          });
+        } else {
+          html += '<div style="color: #aaa; font-size: 13px;">No scores yet today. Be the first!</div>';
+        }
+        
+        card.innerHTML = html;
+        btn.style.display = 'none';
+      } catch (e) {
+        btn.textContent = 'Failed to load leaderboard';
         setTimeout(() => {
-          btn.textContent = 'Share your score';
-          btn.classList.remove('copied');
+          btn.textContent = 'View Daily Leaderboard';
+          btn.disabled = false;
         }, 2000);
-      });
+      }
     });
-    
+
     document.querySelector('.results-close').addEventListener('click', () => {
        window.location.reload();
     });

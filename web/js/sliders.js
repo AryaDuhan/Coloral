@@ -10,6 +10,7 @@
  */
 
 import { hsbToCss } from './scoring.js';
+import { playSliderTick } from './audio.js';
 
 /**
  * Create HSB sliders inside a container element.
@@ -42,12 +43,7 @@ export function createSliders(container, onChange) {
     thumb.className = 'slider-thumb';
     track.appendChild(thumb);
 
-    const label = document.createElement('span');
-    label.className = 'slider-label';
-    label.textContent = cfg.label;
-
     group.appendChild(track);
-    group.appendChild(label);
     container.appendChild(group);
 
     els[cfg.key] = { track, thumb };
@@ -88,17 +84,30 @@ export function createSliders(container, onChange) {
     let pct = (clientY - rect.top) / rect.height;
     pct = Math.max(0, Math.min(1, pct));
 
+    let changed = false;
+
     if (key === 'h') {
-      h = Math.round(pct * 360);
+      const n = Math.round(pct * 360);
+      if (h !== n) { h = n; changed = true; }
     } else if (key === 's') {
-      s = Math.round((1 - pct) * 100); // inverted
+      const n = Math.round((1 - pct) * 100); // inverted
+      if (s !== n) { s = n; changed = true; }
     } else {
-      b = Math.round((1 - pct) * 100); // inverted
+      const n = Math.round((1 - pct) * 100); // inverted
+      if (b !== n) { b = n; changed = true; }
     }
 
-    updateGradients();
-    updateThumbs();
-    onChange(h, s, b);
+    if (changed) {
+      // Throttle ticking by only ticking when the value crosses a threshold (like every 2 units)
+      // to avoid sound buzz when dragging slowly.
+      if ((key === 'h' && h % 2 === 0) || (key !== 'h' && (key === 's' ? s % 2 === 0 : b % 2 === 0))) {
+         playSliderTick(0.6);
+      }
+      
+      updateGradients();
+      updateThumbs();
+      onChange(h, s, b);
+    }
   }
 
   // Attach pointer events to each track

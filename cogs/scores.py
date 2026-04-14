@@ -193,6 +193,16 @@ class ScoresCog(commands.Cog, name="Scores"):
                 rows = await db.get_test_leaderboard(game_number, limit=10)
                 if rows:
                     lines = []
+                    
+                    # Dump for web UI
+                    try:
+                        import json
+                        lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+                        with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                            json.dump(lb_data, f)
+                    except Exception as e:
+                        log.error(f"Failed to generate leaderboard.json: {e}")
+
                     for i, row in enumerate(rows, start=1):
                         medal = MEDALS.get(i, f"{i}.")
                         name = discord.utils.escape_markdown(row["username"])

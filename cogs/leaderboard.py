@@ -121,7 +121,7 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
 
     @app_commands.command(name="leaderboard", description="Show the Dialed leaderboards (Daily / All-Time).")
     async def leaderboard(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(thinking=True)
         game = int(date.today().strftime("%Y%m%d"))
         
         view = LeaderboardView(self.bot.db, str(interaction.user.id), game)
