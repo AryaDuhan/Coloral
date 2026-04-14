@@ -5,6 +5,7 @@
 import { initAntiCheat } from './anticheat.js';
 import { GameEngine } from './game.js';
 import { initAudio } from './audio.js';
+import { getDailyColors } from './colors.js';
 
 const container = document.getElementById('phase-container');
 
@@ -162,16 +163,51 @@ async function main() {
     }
   }
 
+  // Get today's game number for localStorage key
+  const { gameNumber } = getDailyColors();
+  const todayKey = `coloral_played_${gameNumber}`;
+  const savedResult = localStorage.getItem(todayKey);
+
+  // If already played today (and not a replay link), show scorecard directly
+  if (savedResult && !replayData && !DEV_MODE) {
+    const saved = JSON.parse(savedResult);
+    const engine = new GameEngine(container, { onComplete: () => {} });
+    engine.showHistoricalScorecard(saved.totalScore, saved.roundData, gameNumber);
+    // Show "already played" status after DOM renders
+    setTimeout(() => {
+      const statusEl = document.getElementById('results-status');
+      if (statusEl) {
+        statusEl.textContent = '🔒 You already played today!';
+        statusEl.style.color = '#FFD166';
+        statusEl.style.opacity = '1';
+      }
+    }, 100);
+    return;
+  }
+
   // Show intro screen
   showIntro(username, () => {
     const engine = new GameEngine(container, {
       onComplete: (totalScore, roundScores, emojis, cheatEvents, roundDataB64) => {
+        // Save completion to localStorage so same-day revisits show scorecard
+        try {
+          const b64 = roundDataB64.replace(/-/g, '+').replace(/_/g, '/');
+          const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+          const roundData = JSON.parse(atob(padded));
+          localStorage.setItem(todayKey, JSON.stringify({
+            totalScore: parseFloat(totalScore.toFixed(2)),
+            roundData
+          }));
+        } catch (e) {
+          console.warn('Could not save daily result to localStorage', e);
+        }
+
         submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundDataB64);
       },
     });
 
     if (replayData && replayData.length > 0) {
-       engine.showHistoricalScorecard(finalScore, replayData, isTest);
+       engine.showHistoricalScorecard(finalScore, replayData, gameNumber);
     } else {
        engine.start();
     }

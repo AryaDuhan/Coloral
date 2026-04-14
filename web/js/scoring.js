@@ -147,14 +147,12 @@ function ciede2000(lab1, lab2) {
 // ── Scoring ────────────────────────────────────────────────────────────────────
 
 /**
- * Map CIEDE2000 ΔE to a 0-10 game score via exponential decay,
- * ensuring that a perfect match (dE = 0) perfectly yields 10.00.
- * Matches dialed.gg generous decay formula closely.
+ * S-curve mapping from CIEDE2000 ΔE to a 0-10 base score.
+ * Midpoint 25.25 (score crosses 5/10), steepness 1.55.
+ * Generous for close matches, punishing for misses.
  */
 function deltaEToScore(dE) {
-  // Steep exponential decay down to ~1.0 score when Delta E is vastly mismatched (e.g. 33 degrees)
-  const score = 10 * Math.exp(-Math.pow(dE/18, 1.4));
-  return Math.max(0, parseFloat(score.toFixed(2)));
+  return 10 / (1 + Math.pow(dE / 25.25, 1.55));
 }
 
 /** Absolute hue difference in degrees (wraps around 360°) */
@@ -164,23 +162,42 @@ function hueDiff(h1, h2) {
 }
 
 /**
- * Score a single round.
+ * Score a single round with full pipeline:
+ *   1. CIEDE2000 base score (S-curve)
+ *   2. Hue recovery (rewards remembering the right color family)
+ *   3. Hue penalty (punishes wrong hue on vivid colors)
+ *
  * @param {{ h: number, s: number, b: number }} target  Target color (HSB)
  * @param {{ h: number, s: number, b: number }} guess   Player's guess (HSB)
  * @returns {number} Score from 0.00 to 10.00
  */
 export function scoreRound(target, guess) {
-  // If absolute match, explicitly return 10
+  // Perfect match shortcut
   if (target.h === guess.h && target.s === guess.s && target.b === guess.b) {
     return 10.00;
   }
 
+  // 1. Base score from CIEDE2000
   const targetLab = hsbToLab(target.h, target.s, target.b);
   const guessLab = hsbToLab(guess.h, guess.s, guess.b);
-
   const dE = ciede2000(targetLab, guessLab);
-  let score = deltaEToScore(dE);
+  let base = deltaEToScore(dE);
 
+  // 2. Hue recovery — reward getting the color family right
+  const hDiff = hueDiff(target.h, guess.h);
+  const avgSat = (target.s + guess.s) / 2;
+
+  const hueAccuracy = Math.max(0, 1 - Math.pow(hDiff / 25, 1.5));
+  const recoverySatWeight = Math.min(1, avgSat / 30);
+  const recovery = (10 - base) * hueAccuracy * recoverySatWeight * 0.25;
+
+  // 3. Hue penalty — punish wrong hue on vivid colors (dead zone: 30°)
+  const huePenFactor = Math.max(0, (hDiff - 30) / 150);
+  const penaltySatWeight = Math.min(1, avgSat / 40);
+  const penalty = base * huePenFactor * penaltySatWeight * 0.15;
+
+  // Final score
+  const score = base + recovery - penalty;
   return Math.max(0, Math.min(10, parseFloat(score.toFixed(2))));
 }
 
@@ -192,3 +209,4 @@ export function scoreEmoji(score) {
   if (score >= 2.0) return '🟫';
   return '⬛';
 }
+

@@ -120,7 +120,7 @@ module.exports = async (req, res) => {
   const displayTitle = isTest ? `🧪 [TEST] ${username}` : `🎨 ${username}`;
 
   const webhookPayload = {
-    username: 'Coloral',
+    username: 'Colorle',
     embeds: [
       {
         title: displayTitle,

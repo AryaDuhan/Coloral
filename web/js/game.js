@@ -147,7 +147,7 @@ export class GameEngine {
     this.container.innerHTML = `
       <div class="memorize" style="background: ${hsbToCss(target.h, target.s, target.b)}">
         <span class="overlay-label round-label" style="color: ${textColor}">${this.round + 1} / ${ROUNDS}</span>
-        <span class="overlay-label brand-label" style="color: ${textColor}">Coloral</span>
+        <span class="overlay-label brand-label" style="color: ${textColor}">Colorle</span>
         <span class="countdown" id="countdown" style="color: ${textColor}"><span class="timer-int" id="timer-int">${MEMORIZE_SECONDS}</span><span class="timer-dec" id="timer-dec">00</span></span>
       </div>
     `;
@@ -355,8 +355,8 @@ export class GameEngine {
     const emojis = this.scores.map(scoreEmoji).join('');
     const cheatEvents = getEvents();
 
-    const roundDataObj = this.rounds.map((r, i) => ({
-      t: [r.target.h, r.target.s, r.target.b],
+    const roundDataObj = this.dailyColors.map((color, i) => ({
+      t: [color.h, color.s, color.b],
       g: [this.guesses[i].h, this.guesses[i].s, this.guesses[i].b],
       s: this.scores[i]
     }));
@@ -370,15 +370,15 @@ export class GameEngine {
     // Fire network completion callback first
     this.callbacks.onComplete(total, this.scores, emojis, cheatEvents, roundDataB64);
 
-    this._renderScorecard(total, roundDataObj);
+    this._renderScorecard(total, roundDataObj, this.gameNumber);
   }
 
-  showHistoricalScorecard(finalScore, replayData, isTest) {
+  showHistoricalScorecard(finalScore, replayData, gameNumber) {
     this.container.innerHTML = '';
-    this._renderScorecard(finalScore, replayData, true);
+    this._renderScorecard(finalScore, replayData, gameNumber, true);
   }
 
-  _renderScorecard(totalScore, roundDataObj, isReplay = false) {
+  _renderScorecard(totalScore, roundDataObj, gameNumber = 0, isReplay = false) {
     const totalStr = totalScore.toFixed(2);
     const scoreNums = roundDataObj.map(r => r.s);
     const emojis = scoreNums.map(scoreEmoji).join('');
@@ -389,8 +389,14 @@ export class GameEngine {
                  totalScore >= 30 ? "Passable, but we expect better." : 
                  "Yikes. Let's pretend this didn't happen.";
 
-    // Determine the short date for the card "Apr 13"
-    const dateObj = new Date();
+    // Derive date from gameNumber (YYYYMMDD) or fallback to today
+    let dateObj;
+    if (gameNumber > 0) {
+      const gs = String(gameNumber);
+      dateObj = new Date(parseInt(gs.slice(0,4)), parseInt(gs.slice(4,6)) - 1, parseInt(gs.slice(6,8)));
+    } else {
+      dateObj = new Date();
+    }
     const shortDateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const fullDateLabel = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -431,7 +437,7 @@ export class GameEngine {
         <div class="results-card">
           <div class="card-line1" style="font-weight: 600; font-size: 15px; color: #fff; margin-bottom: 4px;">Dialed Daily — ${shortDateLabel}</div>
           <div class="card-line2" style="font-size: 14px; color: #aaa; margin-bottom: 6px;">${totalStr}/50 <span style="letter-spacing: -2px; margin-left: 4px;">${emojis}</span></div>
-          <div class="card-line3" style="font-size: 13px; color: #666;">dialed.gg?d=1&s=${totalStr}</div>
+          <div class="card-line3" style="font-size: 13px; color: #666;">dialed.gg?d=${gameNumber}&s=${totalStr}</div>
         </div>
 
         <button class="share-btn" id="share-btn" style="background: #fff; color: #000; width: 100%; padding: 16px; border-radius: 20px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 10px; border: none;">Share your score</button>
@@ -440,7 +446,7 @@ export class GameEngine {
     `;
 
     document.getElementById('share-btn').addEventListener('click', () => {
-      const shareText = \`Dialed Daily — ${shortDateLabel}\\n${totalStr}/50 ${emojis}\\ndialed.gg?d=1&s=${totalStr}\`;
+      const shareText = "Dialed Daily \u2014 " + shortDateLabel + "\n" + totalStr + "/50 " + emojis + "\ndialed.gg?d=" + gameNumber + "&s=" + totalStr;
       const btn = document.getElementById('share-btn');
       navigator.clipboard.writeText(shareText).then(() => {
         btn.textContent = 'Copied!';
