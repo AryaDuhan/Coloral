@@ -202,9 +202,6 @@ async function main() {
   const { gameNumber } = getDailyColors();
   const todayKey = `coloral_played_${user_id}_${gameNumber}`;
 
-  // Clean up old un-namespaced keys (they don't belong to any specific user)
-  localStorage.removeItem(`coloral_played_${gameNumber}`);
-
   const savedResult = localStorage.getItem(todayKey);
 
   // If already played today (and not a replay link), show scorecard directly
@@ -216,8 +213,7 @@ async function main() {
     setTimeout(() => {
       const statusEl = document.getElementById('results-status');
       if (statusEl) {
-        statusEl.textContent = '🔒 You already played today!';
-        statusEl.style.color = '#FFD166';
+        statusEl.innerHTML = `<div style="color: #FFD166; margin-bottom: 4px;">🔒 You already played today!</div><div style="font-size: 11px; opacity: 0.6;">Account: ${username}</div>`;
         statusEl.style.opacity = '1';
       }
     }, 100);

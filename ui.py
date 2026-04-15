@@ -68,7 +68,8 @@ class PlayView(discord.ui.View):
 
         if HMAC_SECRET and WEBSITE_URL:
             token = _generate_token(user_id, username)
-            game_url = f"https://{WEBSITE_URL}/?token={token}"
+            # Add cache-buster to the URL itself
+            game_url = f"https://{WEBSITE_URL}/?token={token}&t={int(time.time())}"
 
             try:
                 await interaction.response.send_message(
