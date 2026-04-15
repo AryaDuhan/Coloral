@@ -8,7 +8,8 @@ import asyncio
 import logging
 import discord
 from discord.ext import commands, tasks
-from config import COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, REMINDER_CHANNEL_ID
+from datetime import date
+from config import COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, REMINDER_CHANNEL_ID, BOT_OWNER_ID
 
 log = logging.getLogger("dialed.lifecycle")
 
@@ -59,7 +60,7 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         log.info("Announcing startup to channels...")
         embed = discord.Embed(
             title="🟢 Bot Online",
-            description="The Dialed bot has successfully started and is ready to track scores!",
+            description="The Colorle bot has successfully started and is ready to track scores!",
             color=COLOR_SUCCESS,
         )
         await broadcast(self.bot, embed)
@@ -79,6 +80,58 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
     @auto_restart.before_loop
     async def before_auto_restart(self):
         await self.bot.wait_until_ready()
+
+    # ── Owner-only commands ────────────────────────────────────────────────
+
+    @discord.app_commands.command(name="shutdown", description="Shut down the bot completely (owner only).")
+    async def shutdown_cmd(self, interaction: discord.Interaction):
+        if str(interaction.user.id) != str(BOT_OWNER_ID):
+            await interaction.response.send_message("❌ This command is restricted to the bot owner.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("🚭 Shutting down...", ephemeral=True)
+        await asyncio.sleep(1)
+        await self.bot.close()
+        os._exit(0)
+
+    @discord.app_commands.command(
+        name="admindeletescore",
+        description="Delete any user's score for a specific day (owner only)."
+    )
+    @discord.app_commands.describe(
+        player="The user whose score to delete.",
+        game_date="The date in YYYYMMDD format (e.g. 20260416). Defaults to today."
+    )
+    async def admin_delete_score(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        game_date: str | None = None,
+    ):
+        if str(interaction.user.id) != str(BOT_OWNER_ID):
+            await interaction.response.send_message("❌ This command is restricted to the bot owner.", ephemeral=True)
+            return
+
+        game_number = int(game_date) if game_date else int(date.today().strftime("%Y%m%d"))
+        user_id = str(player.id)
+
+        success = await self.bot.db.delete_score(user_id, game_number)
+        if success:
+            embed = discord.Embed(
+                title="✅ Score Deleted",
+                description=(
+                    f"Deleted **{player.display_name}**'s score for game **#{game_number}**.\n"
+                    f"They can now play again for that day."
+                ),
+                color=COLOR_SUCCESS,
+            )
+        else:
+            embed = discord.Embed(
+                title="❌ No Score Found",
+                description=f"No score found for **{player.display_name}** on game **#{game_number}**.",
+                color=COLOR_WARNING,
+            )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

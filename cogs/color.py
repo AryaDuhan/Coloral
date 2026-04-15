@@ -15,7 +15,7 @@ class ColorCog(commands.Cog, name="Color"):
 
     @app_commands.command(
         name="color",
-        description="Start a new game of Dialed and get the link to play!",
+        description="Start a new game of Colorle and get the link to play!",
     )
     async def color(self, interaction: discord.Interaction):
         game_number = await self.bot.db.get_current_game_number()
@@ -26,7 +26,7 @@ class ColorCog(commands.Cog, name="Color"):
             description=(
                 f"**{game_str}** awaits!\n\n"
                 "Click the button below to test your color memory. "
-                "Once you're done, paste your results back into this channel!"
+                "Your score will be recorded automatically! 🏆"
             ),
             color=COLOR_PRIMARY,
         )

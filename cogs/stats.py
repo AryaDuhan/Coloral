@@ -67,7 +67,7 @@ class StatsCog(commands.Cog, name="Stats"):
 
     @app_commands.command(
         name="cleartoday",
-        description="Clear your Dialed daily score for today, letting you submit again."
+        description="Clear your Colorle daily score for today, letting you submit again."
     )
     async def cleartoday(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -79,7 +79,7 @@ class StatsCog(commands.Cog, name="Stats"):
         if success:
             embed = discord.Embed(
                 title="✅ Score Cleared",
-                description="Your score for today has been deleted. You can now paste your true score in the score channel!",
+                description="Your score for today has been deleted. You can now play again!",
                 color=COLOR_SUCCESS,
             )
         else:
