@@ -22,6 +22,9 @@ MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 # Webhook author name used by Colorle website
 COLORAL_WEBHOOK_NAME = "Colorle"
 
+# Matches share links: https://site.com/share?u=...&g=...&s=...&sig=...
+SHARE_URL_PATTERN = re.compile(r'/share\?[^\s]+sig=[a-f0-9]{16}', re.IGNORECASE)
+
 
 def _date_to_game(d: date) -> int:
     return int(d.strftime("%Y%m%d"))
@@ -39,6 +42,15 @@ def _verify_score_signature(user_id: str, game_number: int, score: float, cheat_
     if not HMAC_SECRET:
         return False
     data = f"{user_id}:{game_number}:{score}:{cheat_count}"
+    expected = hmac.new(HMAC_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()[:16]
+    return hmac.compare_digest(sig, expected)
+
+
+def _verify_share_signature(user_id: str, game_number: int, score: float, round_data: str, sig: str) -> bool:
+    """Verify the HMAC signature on a share link."""
+    if not HMAC_SECRET:
+        return False
+    data = f"{user_id}:{game_number}:{score}:{round_data}"
     expected = hmac.new(HMAC_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()[:16]
     return hmac.compare_digest(sig, expected)
 
@@ -131,8 +143,9 @@ class ScoresCog(commands.Cog, name="Scores"):
         if message.author.bot:
             return
 
-        # No more text parsing fallback needed
-        pass
+        # Check for share links pasted by users
+        if SHARE_URL_PATTERN.search(message.content):
+            await self._process_share_link(message)
 
     # ── Coloral Webhook Score Processing ──────────────────────────────────────
 
@@ -247,6 +260,110 @@ class ScoresCog(commands.Cog, name="Scores"):
             await message.channel.send(embed=reply_embed)
         except discord.HTTPException:
             pass
+
+    # ── Share Link Processing ─────────────────────────────────────────────────
+
+    async def _process_share_link(self, message: discord.Message):
+        """Process a tamper-proof share link pasted by a user."""
+        try:
+            from urllib.parse import urlparse, parse_qs
+            match = SHARE_URL_PATTERN.search(message.content)
+            if not match:
+                return
+
+            # Extract the full URL from the message
+            url_match = re.search(r'(https?://[^\s]+/share\?[^\s]+)', message.content)
+            if not url_match:
+                return
+
+            parsed = urlparse(url_match.group(1))
+            params = parse_qs(parsed.query)
+
+            user_id = params.get('u', [None])[0]
+            game_number = int(params.get('g', [0])[0])
+            score = float(params.get('s', [0])[0])
+            username = params.get('n', [f'User {user_id}'])[0]
+            round_data = params.get('r', [''])[0]
+            sig = params.get('sig', [''])[0]
+
+            if not user_id or not game_number or not sig:
+                return
+
+            # Verify the link sender is the actual player
+            if str(message.author.id) != user_id:
+                await message.reply(
+                    "❌ This score link belongs to a different user.",
+                    delete_after=10,
+                )
+                return
+
+            # Verify HMAC signature — prevents any tampering
+            if not _verify_share_signature(user_id, game_number, score, round_data, sig):
+                log.warning(f"Invalid share link signature from {message.author} for game {game_number}")
+                return
+
+            # Validate score range
+            if score <= 0 or score > 50:
+                return
+
+            db = self.bot.db
+
+            # Check for duplicate
+            existing = await db.get_existing_score(user_id, game_number)
+            if existing is not None:
+                await message.reply(
+                    "🔒 Your score for this game is already recorded!",
+                    delete_after=10,
+                )
+                return
+
+            # Record the score
+            success = await db.insert_score(user_id, username, game_number, score, round_data)
+            if not success:
+                return
+
+            log.info(f"[SHARE LINK] Recorded: user={user_id} name={username} game={game_number} score={score}")
+
+            # Build response embed with leaderboard
+            rank = await db.get_user_rank(user_id, game_number)
+            rank_str = f"  •  #{rank} today" if rank else ""
+
+            desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
+
+            today = date.today()
+            today_game = _date_to_game(today)
+            if game_number == today_game:
+                rows = await db.get_leaderboard(game_number, limit=10)
+                if rows:
+                    lines = []
+                    for i, row in enumerate(rows, start=1):
+                        medal = MEDALS.get(i, f"{i}.")
+                        name = discord.utils.escape_markdown(row["username"])
+                        lines.append(f"{medal} **{name}** — `{row['score']}/50`")
+                    desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
+
+                    try:
+                        import json
+                        lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+                        with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                            json.dump(lb_data, f)
+                    except Exception as e:
+                        log.error(f"Failed to generate leaderboard.json: {e}")
+
+            reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
+
+            # Delete the share link message and reply with clean embed
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                pass
+            try:
+                await message.channel.send(embed=reply_embed)
+            except discord.HTTPException:
+                pass
+
+        except (ValueError, KeyError, IndexError) as e:
+            log.warning(f"Failed to parse share link: {e}")
 
 
     async def _send_cheat_alert(self, user_id: str, username: str, game_number: int, score: float, cheat_count: int, cheat_details: str):

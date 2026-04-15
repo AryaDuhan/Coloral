@@ -142,20 +142,39 @@ async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, 
         scores: roundScores,
         totalScore: parseFloat(totalScore.toFixed(2)),
         cheatEvents,
-        isTest, // passes test flag to vercel
+        isTest,
         roundData
       }),
     });
 
-    if (res.ok) {
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
       if (statusEl) {
-        statusEl.textContent = isTest ? '🧪 Test score sent!' : '✓ Score submitted to Discord!';
+        const msg = data.webhookFailed
+          ? '⚠ Webhook failed — paste the link below in Discord instead'
+          : '✓ Score submitted to Discord!';
+        statusEl.innerHTML = `
+          <div style="margin-bottom: 8px;">${msg}</div>
+          ${data.shareUrl ? `<button id="copy-share-btn" style="background: #222; border: 1px solid #444; color: #ccc; padding: 8px 16px; border-radius: 8px; font-size: 12px; cursor: pointer;">📋 Copy Score Link</button>` : ''}
+        `;
         statusEl.className = 'results-status success';
+
+        if (data.shareUrl) {
+          document.getElementById('copy-share-btn').addEventListener('click', (e) => {
+            navigator.clipboard.writeText(data.shareUrl).then(() => {
+              e.target.textContent = '✓ Copied!';
+              setTimeout(() => { e.target.textContent = '📋 Copy Score Link'; }, 2000);
+            }).catch(() => {
+              // Fallback: select text
+              prompt('Copy this link:', data.shareUrl);
+            });
+          });
+        }
       }
     } else {
-      const err = await res.json().catch(() => ({}));
       if (statusEl) {
-        statusEl.textContent = err.error === 'Score already recorded'
+        statusEl.textContent = data.error === 'Score already recorded'
           ? '🔒 Score already recorded for today'
           : '⚠ Could not submit — copy your score manually';
         statusEl.className = 'results-status error';

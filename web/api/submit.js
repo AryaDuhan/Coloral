@@ -141,13 +141,44 @@ module.exports = async (req, res) => {
     if (!response.ok) {
       const errText = await response.text();
       console.error('Webhook failed:', response.status, errText);
-      return res.status(500).json({ error: 'Failed to post score to Discord' });
+      // Even if webhook fails, generate share link as fallback
+    }
+
+    // Generate tamper-proof share link
+    const shareData = `${userId}:${gameNumber}:${roundedTotal}:${roundData || ''}`;
+    const shareSig = crypto
+      .createHmac('sha256', secret)
+      .update(shareData)
+      .digest('hex')
+      .slice(0, 16);
+
+    const shareParams = new URLSearchParams({
+      u: userId,
+      g: String(gameNumber),
+      s: String(roundedTotal),
+      n: username,
+    });
+    if (roundData) shareParams.set('r', roundData);
+    shareParams.set('sig', shareSig);
+
+    const siteUrl = process.env.WEBSITE_URL || req.headers.host;
+    const shareUrl = `https://${siteUrl}/share?${shareParams.toString()}`;
+
+    if (!response || !response.ok) {
+      return res.status(200).json({
+        success: true,
+        score: roundedTotal,
+        emojis,
+        shareUrl,
+        webhookFailed: true,
+      });
     }
 
     return res.status(200).json({
       success: true,
       score: roundedTotal,
       emojis,
+      shareUrl,
     });
   } catch (e) {
     console.error('Webhook error:', e);
