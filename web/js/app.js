@@ -200,15 +200,10 @@ async function main() {
 
   // Get today's game number for localStorage key
   const { gameNumber } = getDailyColors();
-  const legacyKey = `coloral_played_${gameNumber}`;
   const todayKey = `coloral_played_${user_id}_${gameNumber}`;
-  
-  // Migrate legacy key to new user-specific key
-  const legacyResult = localStorage.getItem(legacyKey);
-  if (legacyResult) {
-    localStorage.setItem(todayKey, legacyResult);
-    localStorage.removeItem(legacyKey);
-  }
+
+  // Clean up old un-namespaced keys (they don't belong to any specific user)
+  localStorage.removeItem(`coloral_played_${gameNumber}`);
 
   const savedResult = localStorage.getItem(todayKey);
 
