@@ -120,7 +120,7 @@ function showIntro(username, onStart) {
 
 // ── Score Submission ─────────────────────────────────────────────────────────
 
-async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundData) {
+async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundData, _todayKey) {
   const statusEl = document.getElementById('results-status');
 
   // Dev mode: skip API submission
@@ -150,6 +150,15 @@ async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, 
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && data.success) {
+      // Save shareUrl to localStorage for the cached view
+      if (data.shareUrl && _todayKey) {
+        try {
+          const existing = JSON.parse(localStorage.getItem(_todayKey) || '{}');
+          existing.shareUrl = data.shareUrl;
+          localStorage.setItem(_todayKey, JSON.stringify(existing));
+        } catch (e) { /* ignore */ }
+      }
+
       if (statusEl) {
         const msg = data.webhookFailed
           ? '⚠ Webhook failed — paste the link below in Discord instead'
@@ -228,12 +237,28 @@ async function main() {
     const saved = JSON.parse(savedResult);
     const engine = new GameEngine(container, { onComplete: () => {} });
     engine.showHistoricalScorecard(saved.totalScore, saved.roundData, gameNumber);
-    // Show "already played" status after DOM renders
+    // Show "already played" status + share button after DOM renders
     setTimeout(() => {
       const statusEl = document.getElementById('results-status');
       if (statusEl) {
-        statusEl.innerHTML = `<div style="color: #FFD166; margin-bottom: 4px;">🔒 You already played today!</div><div style="font-size: 11px; opacity: 0.6;">Account: ${username}</div>`;
+        let html = `<div style="color: #FFD166; margin-bottom: 4px;">🔒 You already played today!</div>`;
+        html += `<div style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">Account: ${username}</div>`;
+        if (saved.shareUrl) {
+          html += `<button id="copy-share-btn" style="background: #222; border: 1px solid #444; color: #ccc; padding: 8px 16px; border-radius: 8px; font-size: 12px; cursor: pointer;">📋 Copy Score Link</button>`;
+        }
+        statusEl.innerHTML = html;
         statusEl.style.opacity = '1';
+
+        if (saved.shareUrl) {
+          document.getElementById('copy-share-btn').addEventListener('click', (e) => {
+            navigator.clipboard.writeText(saved.shareUrl).then(() => {
+              e.target.textContent = '✓ Copied!';
+              setTimeout(() => { e.target.textContent = '📋 Copy Score Link'; }, 2000);
+            }).catch(() => {
+              prompt('Copy this link:', saved.shareUrl);
+            });
+          });
+        }
       }
     }, 100);
     return;
@@ -256,7 +281,7 @@ async function main() {
           console.warn('Could not save daily result to localStorage', e);
         }
 
-        submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundDataB64);
+        submitScore(token, totalScore, roundScores, emojis, cheatEvents, isTest, roundDataB64, todayKey);
       },
     });
 
