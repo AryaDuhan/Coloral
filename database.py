@@ -67,6 +67,15 @@ class Database:
             )
         """)
 
+        # Migrate test scores to real scores
+        try:
+            await self.db.execute("""
+                INSERT OR IGNORE INTO scores (user_id, username, game_number, score, submitted_at, round_data)
+                SELECT user_id, username, game_number, score, submitted_at, round_data FROM test_scores
+            """)
+        except aiosqlite.OperationalError as e:
+            log.warning(f"Failed to migrate test scores (might not exist yet): {e}")
+
         await self.db.commit()
         log.info(f"Database initialised at {self.path}")
 

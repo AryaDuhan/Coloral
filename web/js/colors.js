@@ -40,18 +40,65 @@ function todayStr() {
  *
  * @returns {{ colors: Array<{h: number, s: number, b: number}>, gameNumber: number }}
  */
-export function getDailyColors() {
-  const dateStr = todayStr();
+export function getDailyColors(dateOverride = null) {
+  const dateStr = dateOverride || todayStr();
   const seed = hashString('coloral-daily-' + dateStr);
   const rng = mulberry32(seed);
 
+  let pdf = new Array(360).fill(1.0);
+
+  function decreaseProb(centerHue, sigma) {
+    for (let i = 0; i < 360; i++) {
+        let dist = Math.min(Math.abs(i - centerHue), 360 - Math.abs(i - centerHue));
+        let decline = Math.exp(- (dist * dist) / (2 * sigma * sigma));
+        pdf[i] -= decline;
+        if (pdf[i] < 0) pdf[i] = 0;
+    }
+  }
+
+  // Penalize yesterday's hues to ensure completely different colors
+  if (!dateOverride) {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yesterdayStr = `${yyyy}${mm}${dd}`;
+    
+    const yesterdayColors = getDailyColors(yesterdayStr).colors;
+    for (const c of yesterdayColors) {
+      decreaseProb(c.h, 45); // Spread yesterday's penalty wide
+    }
+  }
+
   const colors = [];
   for (let i = 0; i < 5; i++) {
+    let totalWeight = pdf.reduce((a, b) => a + b, 0);
+    // Fallback if all probabilities are crushed
+    if (totalWeight <= 0) { 
+        pdf.fill(1.0);
+        totalWeight = 360;
+    }
+    
+    let r = rng() * totalWeight;
+    let curr = 0;
+    let pickedHue = 0;
+    for (let j = 0; j < 360; j++) {
+        curr += pdf[j];
+        if (curr >= r) {
+            pickedHue = j;
+            break;
+        }
+    }
+
     colors.push({
-      h: Math.floor(rng() * 360),         // full hue range
-      s: Math.floor(rng() * 55) + 25,     // 25–80%  (avoids near-grey)
-      b: Math.floor(rng() * 55) + 25,     // 25–80%  (avoids near-black/white)
+      h: pickedHue,
+      s: Math.floor(rng() * 55) + 25,     // 25–80%
+      b: Math.floor(rng() * 55) + 25,     // 25–80%
     });
+    
+    // decrease probability of nearby color being chosen
+    decreaseProb(pickedHue, 30);
   }
 
   return { colors, gameNumber: parseInt(dateStr, 10) };

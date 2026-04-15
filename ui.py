@@ -14,11 +14,7 @@ import time
 
 from config import HMAC_SECRET, WEBSITE_URL
 
-log = logging.getLogger("dialed.ui")
-
-# Track players who clicked "Play Daily" today so we don't spam them
-# Key: (user_id, game_date_str), Value: True
-_active_play_sessions: set[tuple[str, str]] = set()
+# No tracking sessions needed since game auto-submits
 
 
 def _today_game() -> int:
@@ -55,68 +51,31 @@ class PlayView(discord.ui.View):
     async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         username = interaction.user.display_name
-        today = _today_str()
-        session_key = (user_id, today)
 
-        # Main button now points to the real dialed.gg ALWAYS
-        try:
-            await interaction.response.send_message(
-                f"🎮 Let's go! Open the game here: **[dialed.gg](https://dialed.gg)**\n"
-                f"*Paste your score back in this channel when you finish.*",
-                ephemeral=True,
-            )
-        except discord.errors.NotFound:
-            pass
-
-        # Check if they already submitted today's score BEFORE waiting
+        # Check if they already submitted today's score
         db = getattr(interaction.client, "db", None)
         if db is not None:
             existing = await db.get_existing_score(user_id, _today_game())
             if existing is not None:
-                return  # Already submitted, no reminder needed
-
-        # Check if we already have a pending reminder for this player today
-        if session_key in _active_play_sessions:
-            return  # Don't stack multiple reminders
-        _active_play_sessions.add(session_key)
-
-        # Wait 40 seconds for them to play
-        await asyncio.sleep(40)
-
-        # Clean up the session tracker
-        _active_play_sessions.discard(session_key)
-
-        # Check AGAIN if they submitted during the wait
-        if db is not None:
-            existing = await db.get_existing_score(user_id, _today_game())
-            if existing is not None:
-                return  # They submitted while we were waiting — no reminder
-
-        # They didn't submit — nudge them
-        try:
-            await interaction.channel.send(
-                f"🎨 {interaction.user.mention} — done playing? "
-                f"Paste your score link here to record it!",
-                delete_after=60,
-            )
-        except (discord.Forbidden, discord.HTTPException) as e:
-            log.error(f"Failed to send play reminder to {user_id}: {e}")
-
-    @discord.ui.button(label="Test Webhook Clone", style=discord.ButtonStyle.success, emoji="🧪", custom_id="test_daily_btn")
-    async def test_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_id = str(interaction.user.id)
-        username = interaction.user.display_name
+                try:
+                    await interaction.response.send_message(
+                        f"🔒 You already submitted your score for today!",
+                        ephemeral=True,
+                    )
+                except discord.errors.NotFound:
+                    pass
+                return
 
         if HMAC_SECRET and WEBSITE_URL:
             token = _generate_token(user_id, username)
-            game_url = f"https://{WEBSITE_URL}/?token={token}&test=1"
+            game_url = f"https://{WEBSITE_URL}/?token={token}"
 
             try:
                 await interaction.response.send_message(
-                    f"🧪 **Test Mode Active!**\n\n"
-                    f"Open your secure test link:\n"
-                    f"**[Test Coloral Clone]({game_url})**\n\n"
-                    f"*Scores from this link will be sent to the webhook but saved to a separate Test Leaderboard.*",
+                    f"🎮 **Let's go!**\n\n"
+                    f"Open your secure game link:\n"
+                    f"**[Play Dialed Daily]({game_url})**\n\n"
+                    f"*Your score will be logged automatically when you finish.*",
                     ephemeral=True,
                 )
             except discord.errors.NotFound:
@@ -129,3 +88,5 @@ class PlayView(discord.ui.View):
                 )
             except discord.errors.NotFound:
                 pass
+
+

@@ -262,13 +262,12 @@ class ReminderCog(commands.Cog, name="Reminder"):
         log.info(f"Reminder due for Dialed Day {current_game_day_str} "
                  f"(scheduled {REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} UTC, now {now.strftime('%H:%M')} UTC)")
         
+        # Persist that we sent so we don't double fire if the network takes longer than 1 min
+        await self.bot.db.set_last_reminder_date(current_game_day_str)
         try:
             await self._send_reminder()
         except Exception as e:
             log.error(f"Unhandled error in _send_reminder: {e}")
-
-        # Persist that we sent so we don't double fire
-        await self.bot.db.set_last_reminder_date(current_game_day_str)
 
     @daily_reminder.before_loop
     async def before_reminder(self):

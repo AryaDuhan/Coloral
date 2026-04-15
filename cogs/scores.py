@@ -16,17 +16,11 @@ from config import (
 
 log = logging.getLogger("dialed.scores")
 
-# Matches: "Dialed Daily — Apr 5\n40.41/50 🟨🟧🟩🟧🟨\ndialed.gg?d=1&s=40.41"
-DAILY_PATTERN = re.compile(
-    r"Dialed\s+Daily\s*[—\-–]\s*(\w+\s+\d+).*?([\d]+(?:\.[\d]+)?)\s*/\s*50",
-    re.IGNORECASE | re.DOTALL)
-# Matches: "dialed.gg?d=12&s=46.24" (just the URL)
-DAILY_URL = re.compile(r"dialed\.gg\?d=(\d+)&s=([\d]+(?:\.[\d]+)?)", re.IGNORECASE)
-URL_PATTERN = re.compile(r"dialed\.gg", re.IGNORECASE)
+# Matches dialed.gg URLs... removed completely.
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
-# Webhook author name used by Coloral website
-COLORAL_WEBHOOK_NAME = "Coloral"
+# Webhook author name used by Colorle website
+COLORAL_WEBHOOK_NAME = "Colorle"
 
 
 def _date_to_game(d: date) -> int:
@@ -67,10 +61,27 @@ class ScoresCog(commands.Cog, name="Scores"):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        # Sync test leaderboard file on boot
+        await self._sync_test_leaderboard_file()
+        
         if getattr(self, "_caught_up_scores", False):
             return
         self._caught_up_scores = True
         self.bot.loop.create_task(self._run_catchup())
+        
+    async def _sync_test_leaderboard_file(self):
+        try:
+            import json
+            today_game = int(date.today().strftime("%Y%m%d"))
+            rows = await self.bot.db.get_leaderboard(today_game, limit=10)
+            if rows:
+                lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+            else:
+                lb_data = {"scores": []}
+            with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                json.dump(lb_data, f)
+        except Exception as e:
+            log.error(f"Failed to sync init leaderboard.json: {e}")
 
     async def _run_catchup(self):
         await self.bot.wait_until_ready()
@@ -101,9 +112,7 @@ class ScoresCog(commands.Cog, name="Scores"):
                         count += 1
                         continue
 
-                    if URL_PATTERN.search(message.content):
-                        await self.process_message(message, is_catchup=True)
-                        count += 1
+
             except discord.Forbidden:
                 pass
             except discord.HTTPException as e:
@@ -122,7 +131,8 @@ class ScoresCog(commands.Cog, name="Scores"):
         if message.author.bot:
             return
 
-        await self.process_message(message, is_catchup=False)
+        # No more text parsing fallback needed
+        pass
 
     # ── Coloral Webhook Score Processing ──────────────────────────────────────
 
@@ -176,48 +186,6 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         db = self.bot.db
 
-        if is_test:
-            # Handle Test Mode Submission
-            success = await db.insert_test_score(user_id, username, game_number, score, round_data)
-            if not success:
-                return
-
-            log.info(f"[TEST] Recorded: user={user_id} name={username} game={game_number} score={score}")
-
-            if not is_catchup:
-                rank = await db.get_user_test_rank(user_id, game_number)
-                rank_str = f"  •  #{rank} in testing" if rank else ""
-
-                desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
-
-                rows = await db.get_test_leaderboard(game_number, limit=10)
-                if rows:
-                    lines = []
-                    
-                    # Dump for web UI
-                    try:
-                        import json
-                        lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-                        with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                            json.dump(lb_data, f)
-                    except Exception as e:
-                        log.error(f"Failed to generate leaderboard.json: {e}")
-
-                    for i, row in enumerate(rows, start=1):
-                        medal = MEDALS.get(i, f"{i}.")
-                        name = discord.utils.escape_markdown(row["username"])
-                        lines.append(f"{medal} **{name}** — `{row['score']}/50`")
-                    desc += "\n\n**🧪 Test Leaderboard**\n" + "\n".join(lines)
-
-                reply_embed = discord.Embed(description=desc, color=0x3498DB) # Blue for test
-                try:
-                    await message.delete()
-                    await message.channel.send(embed=reply_embed)
-                except discord.HTTPException:
-                    pass
-
-            return # Stop processing, avoid inserting into real db
-
         # ── Normal Mode Submission ──
         # Check for duplicate
         existing = await db.get_existing_score(user_id, game_number)
@@ -250,6 +218,15 @@ class ScoresCog(commands.Cog, name="Scores"):
                         name = discord.utils.escape_markdown(row["username"])
                         lines.append(f"{medal} **{name}** — `{row['score']}/50`")
                     desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
+                    
+                    # Generate the json for the website
+                    try:
+                        import json
+                        lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+                        with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                            json.dump(lb_data, f)
+                    except Exception as e:
+                        log.error(f"Failed to generate leaderboard.json: {e}")
 
             reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
             try:
@@ -298,118 +275,7 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         except discord.HTTPException as e:
             log.error(f"Failed to send cheat alert DM: {e}")
-        except Exception as e:
-            log.error(f"Unexpected error in cheat alert: {e}")
 
-    # ── Standard dialed.gg Score Processing ───────────────────────────────────
-
-    async def process_message(self, message: discord.Message, is_catchup: bool = False):
-        if message.author.bot:
-            return
-        if SCORE_CHANNEL_ID and message.channel.id != SCORE_CHANNEL_ID:
-            return
-        if not URL_PATTERN.search(message.content):
-            return
-
-        match = DAILY_PATTERN.search(message.content)
-        url_match = DAILY_URL.search(message.content)
-
-        if not match and url_match:
-            d_val = int(url_match.group(1))
-            if d_val < 20000000:
-                # This is likely a single mode score (e.g. d=1 for difficulty 1), ignore it.
-                return
-
-        if match:
-            date_str = match.group(1)
-            score = float(match.group(2))
-            parsed_date = _parse_date(date_str)
-
-            # Anti-cheat: verify the text score matches the URL score exactly
-            if url_match:
-                url_score = float(url_match.group(2))
-                if score != url_score:
-                    if not is_catchup:
-                        await message.reply(
-                            embed=discord.Embed(
-                                title="❌ Altered Score Detected",
-                                description="Nice try! The score in your text doesn't match the hidden score in the dialed.gg URL. 🕵️\n\nPlease paste your authentic score directly from the game.",
-                                color=COLOR_WARNING,
-                            ),
-                            delete_after=15,
-                        )
-                    return
-        else:
-            # Fallback: just the URL like dialed.gg?d=20260405&s=46.24
-            if not url_match:
-                return
-            score = float(url_match.group(2))
-            parsed_date = None
-
-        if score <= 0 or score > 50:
-            return
-
-        today = date.today()
-        game_number = _date_to_game(parsed_date) if parsed_date else _date_to_game(today)
-        is_old = (parsed_date < today) if parsed_date else False
-
-        db = self.bot.db
-        username = message.author.display_name
-        user_id = str(message.author.id)
-
-        existing = await db.get_existing_score(user_id, game_number)
-        if existing is not None:
-            if not is_catchup:
-                await message.reply(
-                    embed=discord.Embed(
-                        title="Score Already Recorded 🔒",
-                        description=f"You already submitted **{existing}/50** for this daily.\nYour first score is locked in!",
-                        color=COLOR_WARNING,
-                    ),
-                    delete_after=15,
-                )
-            return
-
-        success = await db.insert_score(user_id, username, game_number, score)
-        if not success:
-            return
-
-        try:
-            await message.add_reaction(CONFIRM_EMOJI)
-        except discord.HTTPException:
-            pass
-
-        rank = await db.get_user_rank(user_id, game_number)
-        rank_str = f"  •  #{rank} today" if rank else ""
-
-        desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
-        if is_old:
-            desc += "\n⚠️ *Older daily — counted in stats but not today's leaderboard.*"
-
-        # Append leaderboard
-        if not is_old:
-            rows = await db.get_leaderboard(game_number, limit=10)
-            if rows:
-                lines = []
-                for i, row in enumerate(rows, start=1):
-                    medal = MEDALS.get(i, f"{i}.")
-                    name = discord.utils.escape_markdown(row["username"])
-                    lines.append(f"{medal} **{name}** — `{row['score']}/50`")
-                desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
-
-        embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
-        await message.reply(embed=embed)
-        log.info(f"{'[CATCHUP] ' if is_catchup else ''}Recorded: user={user_id} name={username} game={game_number} score={score}")
-
-
-    @discord.app_commands.command(name="cleartest", description="Clear all scores from the Test Leaderboard")
-    async def clear_test_cmd(self, interaction: discord.Interaction):
-        if str(interaction.user.id) != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ This command is restricted.", ephemeral=True)
-            return
-
-        count = await self.bot.db.clear_test_scores()
-        await interaction.response.send_message(f"🧹 Cleared {count} records from the Test Leaderboard.", ephemeral=True)
 
 def _score_bar(score: float, max_score: float = 50.0, length: int = 20) -> str:
     filled = round((score / max_score) * length)

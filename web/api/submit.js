@@ -101,13 +101,11 @@ module.exports = async (req, res) => {
 
   // ── Post to Discord Webhook ──────────────────────────────────────────────
   // The embed footer carries verification data for the bot to parse.
-  // Format: userId|gameNumber|score|cheatCount|hmacSig|cheatDetails|TEST?|roundData
   const footerParts = [userId, gameNumber, roundedTotal, cheatCount, scoreSig];
   if (cheatDetails) footerParts.push(cheatDetails);
-  else if (isTest || roundData) footerParts.push(""); // pad if missing and we need to append more 
+  else if (roundData) footerParts.push(""); // pad if missing and we need to append more 
   
-  if (isTest) footerParts.push("TEST");
-  else if (roundData) footerParts.push("");
+  if (roundData) footerParts.push(""); // pad the "TEST" spot to maintain the pipe delimited protocol
 
   if (roundData) footerParts.push(roundData);
 
@@ -117,7 +115,7 @@ module.exports = async (req, res) => {
   else if (roundedTotal < 35) embedColor = 0xFFD166; // yellow
 
   const scoreBar = scores.map((s) => `\`${s.toFixed(1)}\``).join('  ');
-  const displayTitle = isTest ? `🧪 [TEST] ${username}` : `🎨 ${username}`;
+  const displayTitle = `🎨 ${username}`;
 
   const webhookPayload = {
     username: 'Colorle',

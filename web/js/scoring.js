@@ -152,7 +152,8 @@ function ciede2000(lab1, lab2) {
  * Generous for close matches, punishing for misses.
  */
 function deltaEToScore(dE) {
-  return 10 / (1 + Math.pow(dE / 25.25, 1.55));
+  // Fair midpoint 23.0, custom strictness
+  return 10 / (1 + Math.pow(dE / 23.0, 1.7));
 }
 
 /** Absolute hue difference in degrees (wraps around 360°) */
@@ -177,7 +178,7 @@ export function scoreRound(target, guess) {
     return 10.00;
   }
 
-  // 1. Base score from CIEDE2000
+  // Base score from CIEDE2000
   const targetLab = hsbToLab(target.h, target.s, target.b);
   const guessLab = hsbToLab(guess.h, guess.s, guess.b);
   const dE = ciede2000(targetLab, guessLab);
@@ -187,14 +188,14 @@ export function scoreRound(target, guess) {
   const hDiff = hueDiff(target.h, guess.h);
   const avgSat = (target.s + guess.s) / 2;
 
-  const hueAccuracy = Math.max(0, 1 - Math.pow(hDiff / 25, 1.5));
+  const hueAccuracy = Math.max(0, 1 - Math.pow(hDiff / 20, 1.5));
   const recoverySatWeight = Math.min(1, avgSat / 30);
-  const recovery = (10 - base) * hueAccuracy * recoverySatWeight * 0.25;
+  const recovery = (10 - base) * hueAccuracy * recoverySatWeight * 0.20;
 
-  // 3. Hue penalty — punish wrong hue on vivid colors (dead zone: 30°)
-  const huePenFactor = Math.max(0, (hDiff - 30) / 150);
-  const penaltySatWeight = Math.min(1, avgSat / 40);
-  const penalty = base * huePenFactor * penaltySatWeight * 0.15;
+  // 3. Hue penalty — punish wrong hue on vivid colors (dead zone: 12°)
+  const huePenFactor = Math.max(0, (hDiff - 12) / 100);
+  const penaltySatWeight = Math.min(1, avgSat / 30);
+  const penalty = base * Math.min(1, huePenFactor) * penaltySatWeight * 0.28;
 
   // Final score
   const score = base + recovery - penalty;

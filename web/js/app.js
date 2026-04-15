@@ -200,7 +200,16 @@ async function main() {
 
   // Get today's game number for localStorage key
   const { gameNumber } = getDailyColors();
-  const todayKey = `coloral_played_${gameNumber}`;
+  const legacyKey = `coloral_played_${gameNumber}`;
+  const todayKey = `coloral_played_${user_id}_${gameNumber}`;
+  
+  // Migrate legacy key to new user-specific key
+  const legacyResult = localStorage.getItem(legacyKey);
+  if (legacyResult) {
+    localStorage.setItem(todayKey, legacyResult);
+    localStorage.removeItem(legacyKey);
+  }
+
   const savedResult = localStorage.getItem(todayKey);
 
   // If already played today (and not a replay link), show scorecard directly
