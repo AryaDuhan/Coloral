@@ -39,7 +39,7 @@ class GraphCog(commands.Cog, name="Graph"):
                 title="Not Enough Data",
                 description=(
                     f"**{target.display_name}** needs at least 2 scores to generate a graph.\n"
-                    "Keep playing at **dialed.gg** and check back! 🎨"
+                    "Keep playing **Colorle** and check back! 🎨"
                 ),
                 color=COLOR_WARNING,
             )
@@ -52,12 +52,12 @@ class GraphCog(commands.Cog, name="Graph"):
             username=target.display_name,
         )
 
-        file  = discord.File(buf, filename="dialed_progress.png")
+        file  = discord.File(buf, filename="colorle_progress.png")
         embed = discord.Embed(
             title=f"📈 Score History — {target.display_name}",
             color=0xE96479,
         )
-        embed.set_image(url="attachment://dialed_progress.png")
+        embed.set_image(url="attachment://colorle_progress.png")
         embed.set_footer(text=f"Last {len(records)} games  •  Max score: 50")
         embed.timestamp = discord.utils.utcnow()
 
@@ -141,7 +141,7 @@ async def _render_chart(records: list[dict], username: str) -> io.BytesIO:
     ax.grid(axis="y", color=GRIDLINE, linewidth=0.8, alpha=0.6)
 
     ax.set_title(
-        f"Dialed — {username}'s Score History",
+        f"Colorle — {username}'s Score History",
         color=TEXT, fontsize=13, fontweight="bold", pad=14,
     )
     ax.set_ylabel("Score / 50", color=TEXT, fontsize=9)

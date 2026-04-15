@@ -26,7 +26,7 @@ class LeaderboardView(discord.ui.View):
         if not rows:
             return discord.Embed(
                 title="📅 Daily Leaderboard",
-                description="No daily scores yet today.\nShare your result from **dialed.gg** here! 🎨",
+                description="No daily scores yet today.\nClick **Play Daily** to be the first! 🎨",
                 color=COLOR_WARNING,
             )
 

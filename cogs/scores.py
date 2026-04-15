@@ -191,10 +191,15 @@ class ScoresCog(commands.Cog, name="Scores"):
             await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
 
         # ── Normal Mode Submission ──
-        # Check for duplicate
+        # Check for duplicate — still delete the raw webhook to hide the footer
         existing = await db.get_existing_score(user_id, game_number)
         if existing is not None:
             log.info(f"[COLORAL] Duplicate score for user={user_id} game={game_number}, already have {existing}")
+            # Always delete the raw webhook message to hide HMAC footer
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                pass
             return
 
         # Record the score
@@ -204,40 +209,44 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         log.info(f"{'[CATCHUP] ' if is_catchup else ''}[COLORAL] Recorded: user={user_id} name={username} game={game_number} score={score}")
 
-        # Reply with leaderboard (only for live submissions, not catchup)
-        if not is_catchup:
-            rank = await db.get_user_rank(user_id, game_number)
-            rank_str = f"  •  #{rank} today" if rank else ""
+        # Build the bot's own clean embed with leaderboard
+        rank = await db.get_user_rank(user_id, game_number)
+        rank_str = f"  •  #{rank} today" if rank else ""
 
-            desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
+        desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
 
-            today = date.today()
-            today_game = _date_to_game(today)
-            if game_number == today_game:
-                rows = await db.get_leaderboard(game_number, limit=10)
-                if rows:
-                    lines = []
-                    for i, row in enumerate(rows, start=1):
-                        medal = MEDALS.get(i, f"{i}.")
-                        name = discord.utils.escape_markdown(row["username"])
-                        lines.append(f"{medal} **{name}** — `{row['score']}/50`")
-                    desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
-                    
-                    # Generate the json for the website
-                    try:
-                        import json
-                        lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-                        with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                            json.dump(lb_data, f)
-                    except Exception as e:
-                        log.error(f"Failed to generate leaderboard.json: {e}")
+        today = date.today()
+        today_game = _date_to_game(today)
+        if game_number == today_game:
+            rows = await db.get_leaderboard(game_number, limit=10)
+            if rows:
+                lines = []
+                for i, row in enumerate(rows, start=1):
+                    medal = MEDALS.get(i, f"{i}.")
+                    name = discord.utils.escape_markdown(row["username"])
+                    lines.append(f"{medal} **{name}** — `{row['score']}/50`")
+                desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
 
-            reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
-            try:
-                await message.delete()
-                await message.channel.send(embed=reply_embed)
-            except discord.HTTPException:
-                pass
+                # Generate the json for the website
+                try:
+                    import json
+                    lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+                    with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                        json.dump(lb_data, f)
+                except Exception as e:
+                    log.error(f"Failed to generate leaderboard.json: {e}")
+
+        reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
+
+        # Always delete raw webhook and re-post as the bot itself
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            pass
+        try:
+            await message.channel.send(embed=reply_embed)
+        except discord.HTTPException:
+            pass
 
 
     async def _send_cheat_alert(self, user_id: str, username: str, game_number: int, score: float, cheat_count: int, cheat_details: str):

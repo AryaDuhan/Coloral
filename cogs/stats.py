@@ -24,7 +24,7 @@ class StatsCog(commands.Cog, name="Stats"):
         if target.bot:
             embed = discord.Embed(
                 title="❌ Invalid Player",
-                description="Bots don't play Dialed.gg!",
+                description="Bots don't play Colorle!",
                 color=COLOR_WARNING,
             )
             return await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -36,7 +36,7 @@ class StatsCog(commands.Cog, name="Stats"):
         if not s:
             embed = discord.Embed(
                 title="No Stats Yet",
-                description=f"**{target.display_name}** hasn't submitted any daily scores yet.\nShare a result from **dialed.gg** to get started! 🎨",
+                description=f"**{target.display_name}** hasn't submitted any daily scores yet.\nClick **Play Daily** to get started! 🎨",
                 color=COLOR_WARNING,
             )
             await interaction.followup.send(embed=embed)

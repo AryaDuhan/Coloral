@@ -302,11 +302,10 @@ class ReminderCog(commands.Cog, name="Reminder"):
         embed = discord.Embed(
             title=title,
             description=(
-                f"Today's Dialed puzzle {game_str} is live!\n\n"
+                f"Today's Colorle puzzle {game_str} is live!\n\n"
                 "Can you guess the color from memory?\n"
-                "**[▶️ Play now at dialed.gg](https://dialed.gg)**\n\n"
-                "Share your result here once you're done — "
-                "scores are tracked automatically. 🏆"
+                "Click **Play Daily** below to start! 🎨\n\n"
+                "Scores are tracked automatically. 🏆"
             ),
             color=COLOR_PRIMARY,
         )
