@@ -204,11 +204,10 @@ class ScoresCog(commands.Cog, name="Scores"):
             await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
 
         # ── Normal Mode Submission ──
-        # Check for duplicate — still delete the raw webhook to hide the footer
         existing = await db.get_existing_score(user_id, game_number)
         if existing is not None:
             log.info(f"[COLORAL] Duplicate score for user={user_id} game={game_number}, already have {existing}")
-            # Always delete the raw webhook message to hide HMAC footer
+            # Delete the raw webhook after confirming duplicate
             try:
                 await message.delete()
             except discord.HTTPException:
@@ -218,6 +217,7 @@ class ScoresCog(commands.Cog, name="Scores"):
         # Record the score
         success = await db.insert_score(user_id, username, game_number, score, round_data)
         if not success:
+            # Don't delete webhook if DB insert failed — keep it for retry
             return
 
         log.info(f"{'[CATCHUP] ' if is_catchup else ''}[COLORAL] Recorded: user={user_id} name={username} game={game_number} score={score}")
@@ -251,13 +251,17 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
 
-        # Always delete raw webhook and re-post as the bot itself
-        try:
-            await message.delete()
-        except discord.HTTPException:
-            pass
+        # STEP 1: Send the bot's clean embed FIRST
         try:
             await message.channel.send(embed=reply_embed)
+        except discord.HTTPException:
+            # If we can't send our own message, DON'T delete the webhook — keep the raw data visible
+            log.error(f"Failed to send score embed for user={user_id}")
+            return
+
+        # STEP 2: Only delete the raw webhook AFTER our message is confirmed sent
+        try:
+            await message.delete()
         except discord.HTTPException:
             pass
 
@@ -311,8 +315,12 @@ class ScoresCog(commands.Cog, name="Scores"):
             # Check for duplicate
             existing = await db.get_existing_score(user_id, game_number)
             if existing is not None:
-                await message.reply(
-                    "🔒 Your score for this game is already recorded!",
+                try:
+                    await message.delete()
+                except discord.HTTPException:
+                    pass
+                await message.channel.send(
+                    "🔒 Score already recorded for this game!",
                     delete_after=10,
                 )
                 return

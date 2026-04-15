@@ -237,7 +237,7 @@ async function main() {
     const saved = JSON.parse(savedResult);
     const engine = new GameEngine(container, { onComplete: () => {} });
     engine.showHistoricalScorecard(saved.totalScore, saved.roundData, gameNumber);
-    // Show "already played" status + share button after DOM renders
+    // Show "already played" status + share button + replay option after DOM renders
     setTimeout(() => {
       const statusEl = document.getElementById('results-status');
       if (statusEl) {
