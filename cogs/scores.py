@@ -186,6 +186,10 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         db = self.bot.db
 
+        # ── Secret Anti-Cheat Alert (fires BEFORE duplicate check) ────────────
+        if cheat_count > 0 and BOT_OWNER_ID:
+            await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
+
         # ── Normal Mode Submission ──
         # Check for duplicate
         existing = await db.get_existing_score(user_id, game_number)
@@ -235,36 +239,49 @@ class ScoresCog(commands.Cog, name="Scores"):
             except discord.HTTPException:
                 pass
 
-        # ── Secret Anti-Cheat Alert ───────────────────────────────────────────
-        if cheat_count > 0 and BOT_OWNER_ID:
-            await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
 
     async def _send_cheat_alert(self, user_id: str, username: str, game_number: int, score: float, cheat_count: int, cheat_details: str):
-        """Send a secret DM to the bot owner about suspicious activity."""
+        """Send a secret DM to the bot owner with grouped cheat breakdown."""
         try:
             owner = await self.bot.fetch_user(BOT_OWNER_ID)
             if not owner:
                 return
 
-            # Parse cheat details: "R2:print_screen,R4:window_blur"
-            event_lines = []
+            # Parse and group: "R2:print_screen,R4:window_blur,R4:print_screen"
+            # -> { "print_screen": [2, 4], "window_blur": [4] }
+            grouped: dict[str, list[int]] = {}
             if cheat_details:
                 for event in cheat_details.split(","):
                     parts = event.split(":", 1)
                     if len(parts) == 2:
-                        round_num = parts[0]  # e.g. "R2"
-                        event_type = parts[1]  # e.g. "print_screen"
-                        label = CHEAT_LABELS.get(event_type, f"⚠️ {event_type}")
-                        event_lines.append(f"• Round {round_num[1:]}: {label}")
+                        try:
+                            round_num = int(parts[0][1:])  # "R2" -> 2
+                        except ValueError:
+                            continue
+                        event_type = parts[1]
+                        grouped.setdefault(event_type, []).append(round_num)
 
-            events_text = "\n".join(event_lines) if event_lines else f"• {cheat_count} suspicious event(s) detected"
+            if grouped:
+                event_lines = []
+                for event_type, rounds in grouped.items():
+                    label = CHEAT_LABELS.get(event_type, f"⚠️ {event_type}")
+                    rounds_str = ", ".join(str(r) for r in sorted(rounds))
+                    count = len(rounds)
+                    event_lines.append(
+                        f"{label}\n"
+                        f"  × **{count}** time{'s' if count > 1 else ''} — Rounds: **{rounds_str}**"
+                    )
+                events_text = "\n\n".join(event_lines)
+            else:
+                events_text = f"• {cheat_count} suspicious event(s) detected (no details available)"
 
             embed = discord.Embed(
                 title="🕵️ Cheat Alert",
                 description=(
-                    f"**{username}** (`{user_id}`) triggered suspicious activity during today's game.\n\n"
+                    f"**{username}** (`{user_id}`) triggered **{cheat_count}** suspicious event{'s' if cheat_count > 1 else ''} "
+                    f"during today's game.\n\n"
                     f"**Score:** {score}/50 • **Game:** #{game_number}\n\n"
-                    f"**Events during memorize phase:**\n{events_text}"
+                    f"**Breakdown:**\n{events_text}"
                 ),
                 color=0xFF6B6B,
             )
