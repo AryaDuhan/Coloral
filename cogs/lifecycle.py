@@ -133,6 +133,59 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
             )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @discord.app_commands.command(
+        name="adminaddscore",
+        description="Manually insert a score for any user (owner only)."
+    )
+    @discord.app_commands.describe(
+        player="The user to add a score for.",
+        score="The total score (e.g. 44.57).",
+        game_date="The date in YYYYMMDD format (e.g. 20260417). Defaults to latest game or today."
+    )
+    async def admin_add_score(
+        self,
+        interaction: discord.Interaction,
+        player: discord.Member,
+        score: float,
+        game_date: str | None = None,
+    ):
+        if str(interaction.user.id) != str(BOT_OWNER_ID):
+            await interaction.response.send_message("❌ This command is restricted to the bot owner.", ephemeral=True)
+            return
+
+        if score <= 0 or score > 50:
+            await interaction.response.send_message("❌ Score must be between 0 and 50.", ephemeral=True)
+            return
+
+        if game_date:
+            game_number = int(game_date)
+        else:
+            # Use latest game number from DB, fallback to today
+            latest = await self.bot.db.get_current_game_number()
+            game_number = latest if latest else int(date.today().strftime("%Y%m%d"))
+
+        user_id = str(player.id)
+        username = player.display_name
+
+        success = await self.bot.db.insert_score(user_id, username, game_number, score)
+        if success:
+            rank = await self.bot.db.get_user_rank(user_id, game_number)
+            embed = discord.Embed(
+                title="✅ Score Added",
+                description=(
+                    f"**{username}** — **{score}/50**\n"
+                    f"Game **#{game_number}** • Rank **#{rank}**"
+                ),
+                color=COLOR_SUCCESS,
+            )
+        else:
+            embed = discord.Embed(
+                title="❌ Score Already Exists",
+                description=f"**{username}** already has a score for game **#{game_number}**.\nUse `/admindeletescore` first to replace it.",
+                color=COLOR_WARNING,
+            )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(LifecycleCog(bot))
