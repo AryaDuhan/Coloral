@@ -88,6 +88,11 @@ class ScoresCog(commands.Cog, name="Scores"):
             import json
             today_game = int(date.today().strftime("%Y%m%d"))
             rows = await self.bot.db.get_leaderboard(today_game, limit=10)
+            # Fallback to latest game if today (local) has no scores (UTC/IST mismatch)
+            if not rows:
+                latest = await self.bot.db.get_current_game_number()
+                if latest:
+                    rows = await self.bot.db.get_leaderboard(latest, limit=10)
             if rows:
                 lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
             else:
@@ -235,26 +240,23 @@ class ScoresCog(commands.Cog, name="Scores"):
         if round_breakdown:
             desc += f"\n\n{round_breakdown}"
 
-        today = date.today()
-        today_game = _date_to_game(today)
-        if game_number == today_game:
-            rows = await db.get_leaderboard(game_number, limit=10)
-            if rows:
-                lines = []
-                for i, row in enumerate(rows, start=1):
-                    medal = MEDALS.get(i, f"{i}.")
-                    name = discord.utils.escape_markdown(row["username"])
-                    lines.append(f"{medal} **{name}** — `{row['score']}/50`")
-                desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
+        # Always show leaderboard for the submitted game and update website JSON
+        rows = await db.get_leaderboard(game_number, limit=10)
+        if rows:
+            lines = []
+            for i, row in enumerate(rows, start=1):
+                medal = MEDALS.get(i, f"{i}.")
+                name = discord.utils.escape_markdown(row["username"])
+                lines.append(f"{medal} **{name}** — `{row['score']}/50`")
+            desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
 
-                # Generate the json for the website
-                try:
-                    import json
-                    lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-                    with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                        json.dump(lb_data, f)
-                except Exception as e:
-                    log.error(f"Failed to generate leaderboard.json: {e}")
+            # Generate the json for the website
+            try:
+                lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+                with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                    json.dump(lb_data, f)
+            except Exception as e:
+                log.error(f"Failed to generate leaderboard.json: {e}")
 
         reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
 
@@ -350,25 +352,22 @@ class ScoresCog(commands.Cog, name="Scores"):
             if round_breakdown:
                 desc += f"\n\n{round_breakdown}"
 
-            today = date.today()
-            today_game = _date_to_game(today)
-            if game_number == today_game:
-                rows = await db.get_leaderboard(game_number, limit=10)
-                if rows:
-                    lines = []
-                    for i, row in enumerate(rows, start=1):
-                        medal = MEDALS.get(i, f"{i}.")
-                        name = discord.utils.escape_markdown(row["username"])
-                        lines.append(f"{medal} **{name}** — `{row['score']}/50`")
-                    desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
+            # Always show leaderboard for the submitted game and update website JSON
+            rows = await db.get_leaderboard(game_number, limit=10)
+            if rows:
+                lines = []
+                for i, row in enumerate(rows, start=1):
+                    medal = MEDALS.get(i, f"{i}.")
+                    name = discord.utils.escape_markdown(row["username"])
+                    lines.append(f"{medal} **{name}** — `{row['score']}/50`")
+                desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
 
-                    try:
-                        import json
-                        lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-                        with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                            json.dump(lb_data, f)
-                    except Exception as e:
-                        log.error(f"Failed to generate leaderboard.json: {e}")
+                try:
+                    lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
+                    with open("web/leaderboard.json", "w", encoding="utf-8") as f:
+                        json.dump(lb_data, f)
+                except Exception as e:
+                    log.error(f"Failed to generate leaderboard.json: {e}")
 
             reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
 
