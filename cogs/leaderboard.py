@@ -45,8 +45,9 @@ class LeaderboardView(discord.ui.View):
         )
 
         user_rank = await self.db.get_user_rank(self.uid, self.game)
-        user_score = await self.db.get_existing_score(self.uid, self.game)
-        if user_score is not None and user_rank is not None:
+        user_data = await self.db.get_existing_score(self.uid, self.game)
+        if user_data is not None and user_rank is not None:
+            user_score = user_data["score"] if isinstance(user_data, dict) else user_data
             embed.set_footer(text=f"You are #{user_rank} with {user_score}/50")
         else:
             embed.set_footer(text="Submit your score by sharing your daily result!")
@@ -123,6 +124,14 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
         game = int(date.today().strftime("%Y%m%d"))
+        
+        # If no scores for today's local date, try the latest game in the DB
+        # (handles UTC/IST timezone mismatch after midnight)
+        rows = await self.bot.db.get_leaderboard(game, limit=1)
+        if not rows:
+            latest = await self.bot.db.get_current_game_number()
+            if latest:
+                game = latest
         
         view = LeaderboardView(self.bot.db, str(interaction.user.id), game)
         embed = await view.get_daily_embed()

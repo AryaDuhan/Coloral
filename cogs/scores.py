@@ -3,6 +3,8 @@ cogs/scores.py — Listens for dialed.gg daily score pastes and Coloral webhook 
 """
 
 import re
+import json
+import base64
 import hmac
 import hashlib
 import logging
@@ -228,6 +230,11 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
 
+        # Add per-round score breakdown with color-coded indicators
+        round_breakdown = _format_round_breakdown(round_data)
+        if round_breakdown:
+            desc += f"\n\n{round_breakdown}"
+
         today = date.today()
         today_game = _date_to_game(today)
         if game_number == today_game:
@@ -338,6 +345,11 @@ class ScoresCog(commands.Cog, name="Scores"):
 
             desc = f"**{username}** — **{score}/50**\n{_score_bar(score)}{rank_str}"
 
+            # Add per-round score breakdown with color-coded indicators
+            round_breakdown = _format_round_breakdown(round_data)
+            if round_breakdown:
+                desc += f"\n\n{round_breakdown}"
+
             today = date.today()
             today_game = _date_to_game(today)
             if game_number == today_game:
@@ -431,6 +443,48 @@ class ScoresCog(commands.Cog, name="Scores"):
 def _score_bar(score: float, max_score: float = 50.0, length: int = 20) -> str:
     filled = round((score / max_score) * length)
     return f"`{'█' * filled + '░' * (length - filled)}` {round((score / max_score) * 100, 1)}%"
+
+
+def _round_score_emoji(score: float) -> str:
+    """Return a colored circle emoji based on the round score (0-10)."""
+    if score >= 9.5:
+        return "🟢"  # Perfect / near-perfect
+    if score >= 8.0:
+        return "🟢"  # Great
+    if score >= 6.0:
+        return "🟡"  # Good
+    if score >= 4.0:
+        return "🟠"  # Okay
+    if score >= 2.0:
+        return "🔴"  # Poor
+    return "⚫"      # Terrible
+
+
+def _format_round_breakdown(round_data_b64: str) -> str:
+    """Decode base64url round data and format a per-round score breakdown."""
+    if not round_data_b64:
+        return ""
+    try:
+        # Re-add base64 padding
+        b64 = round_data_b64.replace('-', '+').replace('_', '/')
+        padding = 4 - (len(b64) % 4)
+        if padding != 4:
+            b64 += '=' * padding
+        raw = base64.b64decode(b64)
+        rounds = json.loads(raw)
+
+        if not isinstance(rounds, list) or len(rounds) == 0:
+            return ""
+
+        parts = []
+        for i, r in enumerate(rounds, start=1):
+            s = r.get("s", 0)
+            emoji = _round_score_emoji(s)
+            parts.append(f"{emoji} `{s:.2f}`")
+
+        return "  ".join(parts)
+    except Exception:
+        return ""
 
 
 async def setup(bot: commands.Bot):
