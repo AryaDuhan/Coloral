@@ -36,15 +36,7 @@ async def broadcast(bot, embed: discord.Embed):
 
 
 async def shutdown_and_restart(bot):
-    """Broadcast shutdown, close the bot, then replace the process."""
-    embed = discord.Embed(
-        title="🔄 Restarting...",
-        description="The bot is shutting down for a restart. Be right back!",
-        color=COLOR_WARNING,
-    )
-    await broadcast(bot, embed)
-    # Small delay to ensure messages are delivered
-    await asyncio.sleep(1)
+    """Close the bot and replace the process."""
     await bot.close()
     # Exit cleanly at OS level with code 42 — phone_start.sh intercepts this to restart
     os._exit(42)
