@@ -63,7 +63,7 @@ module.exports = async (req, res) => {
   // ── Build Score Data ─────────────────────────────────────────────────────
   const now = new Date();
   const gameNumber = parseInt(
-    `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`
   );
 
   const roundedTotal = parseFloat(totalScore.toFixed(2));
@@ -81,7 +81,7 @@ module.exports = async (req, res) => {
 
   // Date label
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const dateLabel = `${months[now.getMonth()]} ${now.getDate()}`;
+  const dateLabel = `${months[now.getUTCMonth()]} ${now.getUTCDate()}`;
 
   // HMAC signature of score data for bot verification
   const scoreData = `${userId}:${gameNumber}:${roundedTotal}:${cheatCount}`;
@@ -144,6 +144,10 @@ module.exports = async (req, res) => {
       // Even if webhook fails, generate share link as fallback
     }
 
+    // ── Update Leaderboard Message ────────────────────────────────────────
+    // Uses a persistent webhook message (no embed) as a mini JSON "database"
+    await updateLeaderboardMessage(webhookUrl, gameNumber, username, roundedTotal);
+
     // Generate tamper-proof share link
     const shareData = `${userId}:${gameNumber}:${roundedTotal}:${roundData || ''}`;
     const shareSig = crypto
@@ -185,3 +189,55 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Failed to post score to Discord' });
   }
 };
+
+
+// ── Leaderboard Message Helper ─────────────────────────────────────────────
+// Uses a single Discord webhook message (content-only, no embed) as a
+// persistent JSON store. The bot ignores it since it has no embeds.
+
+async function updateLeaderboardMessage(webhookUrl, gameNumber, username, score) {
+  const msgId = process.env.LEADERBOARD_MSG_ID;
+  if (!msgId) return;
+
+  try {
+    const parts = webhookUrl.replace(/\/$/, '').split('/');
+    const webhookToken = parts.pop();
+    const webhookId = parts.pop();
+    const baseUrl = `https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}/messages/${msgId}`;
+
+    // 1. Read existing leaderboard message
+    const getRes = await fetch(baseUrl);
+    let data = { game: gameNumber, scores: [] };
+
+    if (getRes.ok) {
+      const msg = await getRes.json();
+      try {
+        const parsed = JSON.parse(msg.content);
+        // If same day, keep existing scores; otherwise reset
+        if (parsed.game === gameNumber) {
+          data = parsed;
+        }
+      } catch (e) { /* fresh start */ }
+    }
+
+    // 2. Add or update this player's score
+    const existing = data.scores.findIndex(s => s.username === username);
+    if (existing >= 0) {
+      data.scores[existing].total_score = score;
+    } else {
+      data.scores.push({ username, total_score: score });
+    }
+
+    // Sort descending
+    data.scores.sort((a, b) => b.total_score - a.total_score);
+
+    // 3. Write back
+    await fetch(baseUrl, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: JSON.stringify(data) }),
+    });
+  } catch (e) {
+    console.error('Failed to update leaderboard message:', e);
+  }
+}

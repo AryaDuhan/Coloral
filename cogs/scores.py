@@ -9,7 +9,7 @@ import hmac
 import hashlib
 import logging
 import discord
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from discord.ext import commands
 from config import (
     CONFIRM_EMOJI, SCORE_CHANNEL_ID, COLOR_SUCCESS, COLOR_WARNING,
@@ -29,6 +29,7 @@ SHARE_URL_PATTERN = re.compile(r'/share\?[^\s]+sig=[a-f0-9]{16}', re.IGNORECASE)
 
 
 def _date_to_game(d: date) -> int:
+    """Convert a date to game number (YYYYMMDD)."""
     return int(d.strftime("%Y%m%d"))
 
 
@@ -86,9 +87,9 @@ class ScoresCog(commands.Cog, name="Scores"):
     async def _sync_test_leaderboard_file(self):
         try:
             import json
-            today_game = int(date.today().strftime("%Y%m%d"))
+            today_game = int(datetime.now(timezone.utc).strftime("%Y%m%d"))
             rows = await self.bot.db.get_leaderboard(today_game, limit=10)
-            # Fallback to latest game if today (local) has no scores (UTC/IST mismatch)
+            # Fallback to latest game if today has no scores yet
             if not rows:
                 latest = await self.bot.db.get_current_game_number()
                 if latest:

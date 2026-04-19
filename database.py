@@ -4,7 +4,7 @@ database.py — SQLite operations for the Dialed bot (daily mode only).
 
 import aiosqlite
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 log = logging.getLogger("dialed.db")
@@ -249,7 +249,7 @@ class Database:
         if not rows:
             return 0
         days = [date.fromisoformat(r[0]) for r in rows]
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         if days[0] not in (today, today - timedelta(days=1)):
             return 0
         streak = 1

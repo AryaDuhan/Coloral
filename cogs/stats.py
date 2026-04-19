@@ -6,7 +6,7 @@ import logging
 import discord
 from discord import app_commands
 from discord.ext import commands
-from datetime import date
+from datetime import datetime, timezone
 from config import COLOR_PRIMARY, COLOR_WARNING, COLOR_SUCCESS
 
 log = logging.getLogger("dialed.stats")
@@ -73,7 +73,7 @@ class StatsCog(commands.Cog, name="Stats"):
         await interaction.response.defer(ephemeral=True)
         db = self.bot.db
         user_id = str(interaction.user.id)
-        game_number = int(date.today().strftime("%Y%m%d"))
+        game_number = int(datetime.now(timezone.utc).strftime("%Y%m%d"))
         
         success = await db.delete_score(user_id, game_number)
         if success:

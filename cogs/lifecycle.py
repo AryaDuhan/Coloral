@@ -8,7 +8,7 @@ import asyncio
 import logging
 import discord
 from discord.ext import commands, tasks
-from datetime import date
+from datetime import datetime, timezone
 from config import COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, REMINDER_CHANNEL_ID, BOT_OWNER_ID
 
 log = logging.getLogger("dialed.lifecycle")
@@ -104,7 +104,7 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
             await interaction.response.send_message("❌ This command is restricted to the bot owner.", ephemeral=True)
             return
 
-        game_number = int(game_date) if game_date else int(date.today().strftime("%Y%m%d"))
+        game_number = int(game_date) if game_date else int(datetime.now(timezone.utc).strftime("%Y%m%d"))
         user_id = str(player.id)
 
         success = await self.bot.db.delete_score(user_id, game_number)
@@ -152,9 +152,9 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         if game_date:
             game_number = int(game_date)
         else:
-            # Use latest game number from DB, fallback to today
+            # Use latest game number from DB, fallback to today (UTC)
             latest = await self.bot.db.get_current_game_number()
-            game_number = latest if latest else int(date.today().strftime("%Y%m%d"))
+            game_number = latest if latest else int(datetime.now(timezone.utc).strftime("%Y%m%d"))
 
         user_id = str(player.id)
         username = player.display_name

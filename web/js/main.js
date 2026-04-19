@@ -87,7 +87,7 @@ function showIntro(username, onStart) {
   lbBtn.addEventListener('click', async () => {
     lbBtn.textContent = 'Loading...';
     try {
-      const res = await fetch('/leaderboard.json?t=' + Date.now());
+      const res = await fetch('/api/leaderboard?t=' + Date.now());
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       

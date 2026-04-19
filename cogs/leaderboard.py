@@ -4,7 +4,7 @@ cogs/leaderboard.py — /leaderboard for daily mode.
 
 import logging
 import discord
-from datetime import date
+from datetime import datetime, timezone
 from discord import app_commands
 from discord.ext import commands
 from config import COLOR_PRIMARY, COLOR_WARNING
@@ -123,10 +123,9 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
     @app_commands.command(name="leaderboard", description="Show the Dialed leaderboards (Daily / All-Time).")
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
-        game = int(date.today().strftime("%Y%m%d"))
+        game = int(datetime.now(timezone.utc).strftime("%Y%m%d"))
         
-        # If no scores for today's local date, try the latest game in the DB
-        # (handles UTC/IST timezone mismatch after midnight)
+        # If no scores for today yet, try the latest game in the DB
         rows = await self.bot.db.get_leaderboard(game, limit=1)
         if not rows:
             latest = await self.bot.db.get_current_game_number()

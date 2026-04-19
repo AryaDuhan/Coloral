@@ -25,18 +25,18 @@ function hashString(str) {
   return Math.abs(hash);
 }
 
-/** Format today's date as YYYYMMDD integer */
+/** Format today's UTC date as YYYYMMDD string */
 function todayStr() {
   const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
   return `${yyyy}${mm}${dd}`;
 }
 
 /**
  * Generate 5 daily HSB colors.
- * Deterministic: same date → same colors for everyone.
+ * Deterministic: same UTC date → same colors for everyone worldwide.
  *
  * @returns {{ colors: Array<{h: number, s: number, b: number}>, gameNumber: number }}
  */
@@ -59,10 +59,10 @@ export function getDailyColors(dateOverride = null) {
   // Penalize yesterday's hues to ensure completely different colors
   if (!dateOverride) {
     const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
+    d.setUTCDate(d.getUTCDate() - 1);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
     const yesterdayStr = `${yyyy}${mm}${dd}`;
     
     const yesterdayColors = getDailyColors(yesterdayStr).colors;
@@ -105,11 +105,11 @@ export function getDailyColors(dateOverride = null) {
 }
 
 /**
- * Format a date string like "Apr 13" from today's date.
+ * Format a date string like "Apr 13" from today's UTC date.
  * @returns {string}
  */
 export function todayLabel() {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const d = new Date();
-  return `${months[d.getMonth()]} ${d.getDate()}`;
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }

@@ -2,7 +2,7 @@
 ui.py — Persistent Discord UI views (Play Daily button + HMAC token generation).
 """
 
-from datetime import datetime, date, timezone
+from datetime import datetime, timezone
 import discord
 import asyncio
 import logging
@@ -18,12 +18,12 @@ from config import HMAC_SECRET, WEBSITE_URL
 
 
 def _today_game() -> int:
-    """Get today's game number (YYYYMMDD format)."""
-    return int(date.today().strftime("%Y%m%d"))
+    """Get today's game number (YYYYMMDD format, UTC)."""
+    return int(datetime.now(timezone.utc).strftime("%Y%m%d"))
 
 
 def _today_str() -> str:
-    return date.today().isoformat()
+    return datetime.now(timezone.utc).date().isoformat()
 
 
 def _generate_token(user_id: str, username: str) -> str:
