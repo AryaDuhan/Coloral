@@ -376,3 +376,37 @@ class Database:
             round(best, 2) if best is not None else None,
             round(worst, 2) if worst is not None else None,
         )
+
+    async def get_round_records_leaderboard(self, limit: int = 10) -> list[dict]:
+        """Get all players' best and worst individual round scores for a round records leaderboard.
+        Returns a list of dicts sorted by best_round descending."""
+        async with self.db.execute(
+            "SELECT user_id, username, round_data FROM scores WHERE round_data != ''"
+        ) as cur:
+            rows = await cur.fetchall()
+
+        # Aggregate per-player
+        player_data: dict[str, dict] = {}
+        for row in rows:
+            uid = row[0]
+            uname = row[1]
+            scores = self._decode_round_data(row[2])
+            if uid not in player_data:
+                player_data[uid] = {"user_id": uid, "username": uname, "best_round": None, "worst_round": None}
+            for s in scores:
+                pb = player_data[uid]
+                if pb["best_round"] is None or s > pb["best_round"]:
+                    pb["best_round"] = s
+                if pb["worst_round"] is None or s < pb["worst_round"]:
+                    pb["worst_round"] = s
+
+        # Round the values
+        for p in player_data.values():
+            if p["best_round"] is not None:
+                p["best_round"] = round(p["best_round"], 2)
+            if p["worst_round"] is not None:
+                p["worst_round"] = round(p["worst_round"], 2)
+
+        # Sort by best_round descending
+        result = sorted(player_data.values(), key=lambda x: x.get("best_round") or 0, reverse=True)
+        return result[:limit]
