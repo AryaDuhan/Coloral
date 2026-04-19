@@ -90,11 +90,38 @@ class LeaderboardView(discord.ui.View):
             
         lines.append("```")
 
+        # Build Best/Worst round fields
+        best_round_lines = []
+        worst_round_lines = []
+        for i, row in enumerate(rows, start=1):
+            medal = MEDALS.get(i, f"**{i}.**")
+            name = discord.utils.escape_markdown(row["username"])
+            br = row.get("best_round")
+            wr = row.get("worst_round")
+            if br is not None:
+                best_round_lines.append(f"{medal} **{name}** — `{br}/10`")
+            if wr is not None:
+                worst_round_lines.append(f"{medal} **{name}** — `{wr}/10`")
+
         embed = discord.Embed(
             title="🏆 All-Time Leaderboard",
             description="\n".join(lines),
             color=COLOR_PRIMARY,
         )
+
+        if best_round_lines:
+            embed.add_field(
+                name="🎯 Best Single Round",
+                value="\n".join(best_round_lines),
+                inline=True,
+            )
+        if worst_round_lines:
+            embed.add_field(
+                name="💀 Worst Single Round",
+                value="\n".join(worst_round_lines),
+                inline=True,
+            )
+
         embed.timestamp = discord.utils.utcnow()
         return embed
 

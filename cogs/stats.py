@@ -56,6 +56,14 @@ class StatsCog(commands.Cog, name="Stats"):
         embed.add_field(name="🔥 Current Streak", value=_streak_display(streak),           inline=True)
         embed.add_field(name="\u200b",            value="\u200b",                          inline=True)
 
+        # Individual round extremes (out of 10)
+        if s.get("best_round") is not None:
+            embed.add_field(name="🎯 Best Round",  value=f"`{s['best_round']}/10`",  inline=True)
+        if s.get("worst_round") is not None:
+            embed.add_field(name="💀 Worst Round", value=f"`{s['worst_round']}/10`", inline=True)
+        if s.get("best_round") is not None or s.get("worst_round") is not None:
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+
         if recent:
             spark = _sparkline([r["score"] for r in recent])
             scores_fmt = "  ".join(f"`{r['score']}`" for r in recent[-7:])

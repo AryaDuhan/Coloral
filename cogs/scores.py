@@ -76,32 +76,10 @@ class ScoresCog(commands.Cog, name="Scores"):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Sync test leaderboard file on boot
-        await self._sync_test_leaderboard_file()
-        
         if getattr(self, "_caught_up_scores", False):
             return
         self._caught_up_scores = True
         self.bot.loop.create_task(self._run_catchup())
-        
-    async def _sync_test_leaderboard_file(self):
-        try:
-            import json
-            today_game = int(datetime.now(timezone.utc).strftime("%Y%m%d"))
-            rows = await self.bot.db.get_leaderboard(today_game, limit=10)
-            # Fallback to latest game if today has no scores yet
-            if not rows:
-                latest = await self.bot.db.get_current_game_number()
-                if latest:
-                    rows = await self.bot.db.get_leaderboard(latest, limit=10)
-            if rows:
-                lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-            else:
-                lb_data = {"scores": []}
-            with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                json.dump(lb_data, f)
-        except Exception as e:
-            log.error(f"Failed to sync init leaderboard.json: {e}")
 
     async def _run_catchup(self):
         await self.bot.wait_until_ready()
@@ -251,13 +229,6 @@ class ScoresCog(commands.Cog, name="Scores"):
                 lines.append(f"{medal} **{name}** — `{row['score']}/50`")
             desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
 
-            # Generate the json for the website
-            try:
-                lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-                with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                    json.dump(lb_data, f)
-            except Exception as e:
-                log.error(f"Failed to generate leaderboard.json: {e}")
 
         reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
 
@@ -363,12 +334,6 @@ class ScoresCog(commands.Cog, name="Scores"):
                     lines.append(f"{medal} **{name}** — `{row['score']}/50`")
                 desc += "\n\n**📅 Today's Leaderboard**\n" + "\n".join(lines)
 
-                try:
-                    lb_data = {"scores": [{"username": r["username"], "total_score": r["score"]} for r in rows]}
-                    with open("web/leaderboard.json", "w", encoding="utf-8") as f:
-                        json.dump(lb_data, f)
-                except Exception as e:
-                    log.error(f"Failed to generate leaderboard.json: {e}")
 
             reply_embed = discord.Embed(description=desc, color=COLOR_SUCCESS)
 

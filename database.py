@@ -3,6 +3,8 @@ database.py — SQLite operations for the Dialed bot (daily mode only).
 """
 
 import aiosqlite
+import base64
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -221,11 +223,17 @@ class Database:
             row = await cur.fetchone()
         if not row or row[0] == 0:
             return None
+
+        # Get best/worst individual round scores
+        best_round, worst_round = await self._get_round_extremes(user_id=str(user_id))
+
         return {
             "games_played": row[0],
             "mean_score": round(row[1], 2),
             "personal_best": row[2],
             "worst_score": row[3],
+            "best_round": best_round,
+            "worst_round": worst_round,
         }
 
     async def get_recent_scores(self, user_id: str, days: int = 14) -> list[dict]:
@@ -272,14 +280,24 @@ class Database:
     async def get_all_time_leaderboard(self, limit: int = 10):
         self.db.row_factory = aiosqlite.Row
         async with self.db.execute(
-            """SELECT user_id, username, ROUND(SUM(score), 2) as total_score, MAX(score) as pb, COUNT(*) as games
+            """SELECT user_id, username, ROUND(SUM(score), 2) as total_score, MAX(score) as pb, MIN(score) as ws, COUNT(*) as games
                FROM scores 
                GROUP BY user_id 
                HAVING COUNT(*) > 0 
                ORDER BY total_score DESC LIMIT ?""",
             (limit,),
         ) as cur:
-            return await cur.fetchall()
+            rows = await cur.fetchall()
+
+        # Enrich each row with best/worst individual round scores
+        enriched = []
+        for row in rows:
+            d = dict(row)
+            best_r, worst_r = await self._get_round_extremes(user_id=d["user_id"])
+            d["best_round"] = best_r
+            d["worst_round"] = worst_r
+            enriched.append(d)
+        return enriched
 
     async def get_max_streak(self, user_id: str) -> int:
         async with self.db.execute(
@@ -308,3 +326,53 @@ class Database:
         async with self.db.execute("SELECT DISTINCT user_id FROM scores") as cur:
             rows = await cur.fetchall()
         return [r[0] for r in rows]
+
+    # ── Round-level extremes ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _decode_round_data(round_data_b64: str) -> list[float]:
+        """Decode base64url round data into a list of individual round scores."""
+        if not round_data_b64:
+            return []
+        try:
+            b64 = round_data_b64.replace('-', '+').replace('_', '/')
+            padding = 4 - (len(b64) % 4)
+            if padding != 4:
+                b64 += '=' * padding
+            raw = base64.b64decode(b64)
+            rounds = json.loads(raw)
+            if not isinstance(rounds, list):
+                return []
+            return [r.get("s", 0) for r in rounds if isinstance(r, dict)]
+        except Exception:
+            return []
+
+    async def _get_round_extremes(self, user_id: str | None = None) -> tuple[float | None, float | None]:
+        """Get the best and worst individual round score for a user (or all users if None).
+        Returns (best_round, worst_round) as floats out of 10, or None if no round data exists."""
+        if user_id:
+            async with self.db.execute(
+                "SELECT round_data FROM scores WHERE user_id = ? AND round_data != ''",
+                (str(user_id),),
+            ) as cur:
+                rows = await cur.fetchall()
+        else:
+            async with self.db.execute(
+                "SELECT round_data FROM scores WHERE round_data != ''"
+            ) as cur:
+                rows = await cur.fetchall()
+
+        best = None
+        worst = None
+        for row in rows:
+            scores = self._decode_round_data(row[0])
+            for s in scores:
+                if best is None or s > best:
+                    best = s
+                if worst is None or s < worst:
+                    worst = s
+
+        return (
+            round(best, 2) if best is not None else None,
+            round(worst, 2) if worst is not None else None,
+        )
