@@ -71,21 +71,21 @@ class LeaderboardView(discord.ui.View):
                 color=COLOR_WARNING,
             )
 
-        # Column widths
+        # Column widths — must fit ~56 chars for Discord code blocks
         W_RNK = 3
-        W_NAME = 10
-        W_TOTAL = 11
-        W_PCT = 5
+        W_NAME = 8
+        W_TOTAL = 10
+        W_PCT = 4
         W_PB = 5
-        W_BR = 5
-        W_WR = 5
+        W_BR = 4
+        W_WR = 4
         W_G = 2
-        W_STR = 2
+        W_S = 2
 
         header = (
             f"{'#'.center(W_RNK)} {'Name'.center(W_NAME)} {'Total'.center(W_TOTAL)} "
             f"{'%'.center(W_PCT)} {'PB'.center(W_PB)} {'BR'.center(W_BR)} {'WR'.center(W_WR)} "
-            f"{'G'.center(W_G)} {'🔥'.center(W_STR)}"
+            f"{'G'.center(W_G)} {'S'.center(W_S)}"
         )
         sep = "─" * len(header)
 
@@ -110,7 +110,7 @@ class LeaderboardView(discord.ui.View):
             br_s = f"{br:g}".center(W_BR) if br is not None else "—".center(W_BR)
             wr_s = f"{wr:g}".center(W_WR) if wr is not None else "—".center(W_WR)
             g_s = str(games).center(W_G)
-            strk_s = str(streak).center(W_STR)
+            strk_s = str(streak).center(W_S)
 
             lines.append(f"{rank_s} {name} {tot_s} {pct_s} {pb_s} {br_s} {wr_s} {g_s} {strk_s}")
 
