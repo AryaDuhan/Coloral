@@ -121,13 +121,13 @@ function scoreBreakdown(target, guess) {
   const hDiff = hueDiff(target.h, guess.h);
   const avgSat = (target.s + guess.s) / 2;
 
-  const hueAccuracy = Math.max(0, 1 - Math.pow(hDiff / 20, 1.5));
+  const hueAccuracy = Math.max(0, 1 - Math.pow(hDiff / 25, 1.5));
   const recoverySatWeight = Math.min(1, avgSat / 30);
-  const recovery = (10 - base) * hueAccuracy * recoverySatWeight * 0.20;
+  const recovery = (10 - base) * hueAccuracy * recoverySatWeight * 0.25;
 
-  const huePenFactor = Math.max(0, (hDiff - 12) / 100);
-  const penaltySatWeight = Math.min(1, avgSat / 30);
-  const penalty = base * Math.min(1, huePenFactor) * penaltySatWeight * 0.28;
+  const huePenFactor = Math.max(0, (hDiff - 30) / 150);
+  const penaltySatWeight = Math.min(1, avgSat / 40);
+  const penalty = base * huePenFactor * penaltySatWeight * 0.15;
 
   const score = Math.max(0, Math.min(10, parseFloat((base + recovery - penalty).toFixed(2))));
   return { score, dE, base, recovery, penalty };

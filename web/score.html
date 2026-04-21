@@ -157,12 +157,12 @@
           points you lost from saturation or brightness errors:
         </p>
         <div class="code-block">
-          <code>hueAccuracy = max(0, 1 − (hueDiff / 20)<sup>1.5</sup>)</code><br>
+          <code>hueAccuracy = max(0, 1 − (hueDiff / 25)<sup>1.5</sup>)</code><br>
           <code>satWeight = min(1, avgSat / 30)</code><br>
-          <code><span class="code-highlight">recovery</span> = (10 − base) × hueAccuracy × satWeight × <span class="code-value">0.20</span></code>
+          <code><span class="code-highlight">recovery</span> = (10 − base) × hueAccuracy × satWeight × <span class="code-value">0.25</span></code>
         </div>
         <p>
-          Recovery is lighter under CIEDE2000 (0.20 factor) because the base
+          Recovery is lighter under CIEDE2000 (0.25 factor) because the base
           formula already handles hue-region differences more accurately. The bonus
           is still meaningful — nailing the hue when brightness or saturation are
           off can recover 1–2 points. On grays (saturation under 30%), recovery
@@ -175,14 +175,14 @@
           the wrong color entirely, you shouldn't keep those points:
         </p>
         <div class="code-block">
-          <code>huePenFactor = max(0, (hueDiff − 12) / 100)</code><br>
-          <code>satWeight = min(1, avgSat / 30)</code><br>
-          <code><span class="code-penalty">penalty</span> = base × min(1, huePenFactor) × satWeight × <span class="code-value">0.28</span></code>
+          <code>huePenFactor = max(0, (hueDiff − 30) / 150)</code><br>
+          <code>satWeight = min(1, avgSat / 40)</code><br>
+          <code><span class="code-penalty">penalty</span> = base × huePenFactor × satWeight × <span class="code-value">0.15</span></code>
         </div>
         <p>
-          There's a 12° dead zone — small hue shifts don't trigger any penalty.
-          Beyond that, up to 28% of your base score can be clawed back on vivid
-          colors. On grays, penalty also fades to zero.
+          There's a 30° dead zone — small hue shifts don't trigger any penalty.
+          Beyond that, up to 15% of your base score can be clawed back on vivid
+          colors. On grays (saturation under 40%), penalty also fades to zero.
         </p>
 
         <h4 class="sub-heading">Final Score</h4>
