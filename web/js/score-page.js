@@ -97,7 +97,7 @@ function ciede2000(lab1, lab2) {
 }
 
 function deltaEToScore(dE) {
-  return 10 / (1 + Math.pow(dE / 23.0, 1.7));
+  return 10 / (1 + Math.pow(dE / 23.0, 1.9));
 }
 
 function hueDiff(h1, h2) {
