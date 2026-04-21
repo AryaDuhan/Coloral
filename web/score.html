@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Scoring Works — Colorle</title>
+  <meta name="description" content="Learn how Colorle scores your color memory using CIEDE2000 perceptual color distance, S-curve mapping, and hue adjustments.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/score.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+</head>
+<body>
+
+  <!-- ── Navigation ─────────────────────────────────────────────────────── -->
+  <nav id="score-nav">
+    <a href="/" class="back-link" id="back-link">← Colorle</a>
+  </nav>
+
+  <!-- ── Hero ───────────────────────────────────────────────────────────── -->
+  <main id="score-main">
+    <section class="hero-section" id="hero-section">
+      <h1>How Scoring Works</h1>
+      <div class="updated-badge">UPDATED APR 2026</div>
+      <p class="subtitle">It's more complicated than you might think.</p>
+    </section>
+
+    <!-- ── Short Version ────────────────────────────────────────────────── -->
+    <section class="content-card short-version" id="short-version-card">
+      <div class="card-label">THE SHORT VERSION</div>
+      <p>
+        We don't just compare slider values. Both colors are converted into a
+        color space designed to match human vision, then the distance between them
+        is measured using <strong>CIEDE2000</strong> — a formula from color science that
+        quantifies how different two colors <em>look</em>, not how far apart their
+        numbers are. It corrects for known issues where older formulas scored
+        greens, blues, and purples unfairly. That distance is shaped into a game
+        score that rewards getting the right color family — because remembering
+        "it was a warm orange" is the hardest part, and that should count.
+        Five rounds, 0–10 per round, max 50.
+      </p>
+    </section>
+
+    <!-- ── Why not just compare slider values? ──────────────────────────── -->
+    <section class="text-section" id="slider-comparison-section">
+      <h2 class="section-title">WHY NOT JUST COMPARE THE SLIDER VALUES?</h2>
+      <div class="section-rule"></div>
+      <p>
+        The game picker uses three sliders: Hue, Saturation, and Brightness (HSB).
+        It's tempting to just subtract the slider numbers and call it a score.
+        But HSB doesn't map to how humans perceive color:
+      </p>
+      <ul class="reasons-list">
+        <li>
+          <strong>Hue sensitivity depends on saturation.</strong> A 40° hue shift on a
+          vivid red is dramatic; the same shift on a desaturated grey is barely
+          visible. Raw slider math would penalize both equally.
+        </li>
+        <li>
+          <strong>Brightness perception is non-linear.</strong> The difference between
+          10% and 20% brightness looks much larger than 80% to 90%, even though
+          both are "10 slider units apart."
+        </li>
+        <li>
+          <strong>Some hue regions are more sensitive.</strong> Humans can distinguish
+          far more shades of green/yellow than blue/purple. A naive formula
+          treats every degree of hue equally.
+        </li>
+      </ul>
+      <p>
+        To fix this, we convert both colors into a <em>perceptually uniform</em>
+        color space and measure the distance there instead.
+      </p>
+    </section>
+
+    <!-- ── The Scoring Pipeline ─────────────────────────────────────────── -->
+    <section class="text-section" id="pipeline-section">
+      <h2 class="section-title">THE SCORING PIPELINE</h2>
+      <div class="section-rule"></div>
+
+      <!-- Step 1 -->
+      <div class="pipeline-step" id="step-1">
+        <h3 class="step-number">1. COLOR SPACE CONVERSION</h3>
+        <p>
+          Both the target color and your guess are converted from HSB through
+          several intermediate spaces:
+        </p>
+        <div class="code-block">
+          <code>HSB → RGB → XYZ (D65 illuminant) → CIELAB</code>
+        </div>
+        <p>
+          CIELAB (also called L*a*b*) is designed so that equal numerical
+          distances correspond to equal perceived differences. The L* axis
+          represents lightness, while a* and b* represent color-opponent
+          dimensions (red-green and yellow-blue).
+        </p>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="pipeline-step" id="step-2">
+        <h3 class="step-number">2. CIEDE2000 DISTANCE</h3>
+        <p>
+          Once both colors are in CIELAB, we compute the <strong>CIEDE2000</strong>
+          (ΔE₀₀) distance — the industry standard for "how different do these
+          two colors look?" It accounts for:
+        </p>
+        <ul class="details-list">
+          <li>Lightness, chroma, and hue weighting</li>
+          <li>Interaction between chroma and hue differences</li>
+          <li>Correction for the "blue problem" (hue rotation in the blue region)</li>
+          <li>A special term (R<sub>T</sub>) for compensating cross-term effects near blue</li>
+        </ul>
+        <p>
+          A ΔE₀₀ of <strong>0</strong> means the colors look identical. A ΔE₀₀ above
+          <strong>50</strong> means they're completely different colors.
+        </p>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="pipeline-step" id="step-3">
+        <h3 class="step-number">3. S-CURVE MAPPING</h3>
+        <p>
+          The raw ΔE₀₀ distance is converted to a 0–10 score using a
+          generalized logistic (S-curve) function:
+        </p>
+        <div class="formula-block" id="formula-display">
+          <span class="formula-text">score = 10 / (1 + (ΔE / 23.0)<sup>1.7</sup>)</span>
+        </div>
+        <p>
+          This creates a generous scoring curve for close matches but punishes
+          large deviations quickly. The midpoint (score ≈ 5.0) sits at about
+          ΔE₀₀ = 23, which is a noticeable but not enormous color difference.
+        </p>
+      </div>
+
+      <!-- S-Curve Chart -->
+      <div class="chart-container" id="s-curve-chart">
+        <canvas id="score-curve-canvas" width="600" height="280"></canvas>
+        <p class="chart-caption">Score (0–10) vs CIEDE2000 perceptual distance. White dot tracks your guess in the demo below.</p>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="pipeline-step" id="step-4">
+        <h3 class="step-number">4. REWARDING COLOR MEMORY</h3>
+        <p>
+          The base score treats all perceptual errors equally. But in a memory game,
+          <strong>remembering the right color family is the hardest part and the most
+          satisfying to get right.</strong> If you remembered "it was a warm orange"
+          and nailed the hue but were off on brightness, that should count for
+          something. Two adjustments tilt the score toward hue accuracy.
+        </p>
+
+        <h4 class="sub-heading">Hue Recovery</h4>
+        <p>
+          If you got the hue right (within about 20°), you earn back some of the
+          points you lost from saturation or brightness errors:
+        </p>
+        <div class="code-block">
+          <code>hueAccuracy = max(0, 1 − (hueDiff / 20)<sup>1.5</sup>)</code><br>
+          <code>satWeight = min(1, avgSat / 30)</code><br>
+          <code><span class="code-highlight">recovery</span> = (10 − base) × hueAccuracy × satWeight × <span class="code-value">0.20</span></code>
+        </div>
+        <p>
+          Recovery is lighter under CIEDE2000 (0.20 factor) because the base
+          formula already handles hue-region differences more accurately. The bonus
+          is still meaningful — nailing the hue when brightness or saturation are
+          off can recover 1–2 points. On grays (saturation under 30%), recovery
+          fades to zero — because hue is visually meaningless on desaturated colors.
+        </p>
+
+        <h4 class="sub-heading">Hue Penalty</h4>
+        <p>
+          Conversely, if you nailed the brightness and saturation but remembered
+          the wrong color entirely, you shouldn't keep those points:
+        </p>
+        <div class="code-block">
+          <code>huePenFactor = max(0, (hueDiff − 12) / 100)</code><br>
+          <code>satWeight = min(1, avgSat / 30)</code><br>
+          <code><span class="code-penalty">penalty</span> = base × min(1, huePenFactor) × satWeight × <span class="code-value">0.28</span></code>
+        </div>
+        <p>
+          There's a 12° dead zone — small hue shifts don't trigger any penalty.
+          Beyond that, up to 28% of your base score can be clawed back on vivid
+          colors. On grays, penalty also fades to zero.
+        </p>
+
+        <h4 class="sub-heading">Final Score</h4>
+        <div class="formula-block">
+          <span class="formula-text">final = base + recovery − penalty</span>
+        </div>
+        <p>Clamped to [0, 10] and rounded to two decimal places.</p>
+      </div>
+    </section>
+
+    <!-- ── Interactive Demo ──────────────────────────────────────────────── -->
+    <section class="text-section" id="interactive-section">
+      <div class="section-rule"></div>
+      <div class="interactive-header">
+        <span class="interactive-badge" id="interactive-badge">INTERACTIVE</span>
+        <h2 class="interactive-title">See the scoring live</h2>
+      </div>
+      <p class="interactive-desc">
+        Adjust the sliders and watch the score update in real time. The white dot
+        on the S-curve above tracks your position.
+      </p>
+
+      <div class="demo-card" id="demo-card">
+        <!-- Color comparison boxes -->
+        <div class="demo-colors" id="demo-colors">
+          <div class="demo-color-box" id="demo-target-box">
+            <span class="demo-color-label">TARGET</span>
+          </div>
+          <div class="demo-color-box" id="demo-guess-box">
+            <span class="demo-color-label">YOUR GUESS</span>
+          </div>
+        </div>
+
+        <!-- Live score -->
+        <div class="demo-score-row" id="demo-score-row">
+          <span class="demo-score-value" id="demo-score-value">5.00</span>
+          <span class="demo-score-max">/ 10</span>
+        </div>
+
+        <!-- Metrics -->
+        <div class="demo-metrics" id="demo-metrics">
+          <div class="demo-metric">
+            <span class="metric-value" id="metric-delta-e">0.0</span>
+            <span class="metric-label">Delta E</span>
+          </div>
+          <div class="demo-metric">
+            <span class="metric-value" id="metric-recovery">+0.00</span>
+            <span class="metric-label">Hue Recovery</span>
+          </div>
+          <div class="demo-metric">
+            <span class="metric-value" id="metric-penalty">-0.00</span>
+            <span class="metric-label">Hue Penalty</span>
+          </div>
+        </div>
+
+        <!-- Horizontal sliders -->
+        <div class="demo-sliders" id="demo-sliders">
+          <div class="demo-slider-row">
+            <label class="demo-slider-label">Hue</label>
+            <input type="range" id="slider-hue" min="0" max="360" value="180" class="demo-range hue-range">
+            <span class="demo-slider-val" id="val-hue">180°</span>
+          </div>
+          <div class="demo-slider-row">
+            <label class="demo-slider-label">Saturation</label>
+            <input type="range" id="slider-sat" min="0" max="100" value="50" class="demo-range sat-range">
+            <span class="demo-slider-val" id="val-sat">50%</span>
+          </div>
+          <div class="demo-slider-row">
+            <label class="demo-slider-label">Brightness</label>
+            <input type="range" id="slider-bri" min="0" max="100" value="60" class="demo-range bri-range">
+            <span class="demo-slider-val" id="val-bri">60%</span>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="demo-actions" id="demo-actions">
+          <button class="demo-btn" id="btn-new-target">New Target</button>
+          <button class="demo-btn" id="btn-reset-guess">Reset Guess</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Score Scale Reference ─────────────────────────────────────────── -->
+    <section class="text-section" id="scale-section">
+      <div class="section-rule"></div>
+      <h2 class="section-title">SCORE SCALE</h2>
+      <div class="scale-table-wrap">
+        <table class="scale-table" id="scale-table">
+          <thead>
+            <tr>
+              <th>Score</th>
+              <th>Emoji</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="scale-range elite">9.50 – 10.00</span></td>
+              <td>🟩</td>
+              <td>Nearly perfect — elite-level recall</td>
+            </tr>
+            <tr>
+              <td><span class="scale-range excellent">8.00 – 9.49</span></td>
+              <td>🟨</td>
+              <td>Excellent memory, minor difference</td>
+            </tr>
+            <tr>
+              <td><span class="scale-range good">6.00 – 7.99</span></td>
+              <td>🟧</td>
+              <td>Good — noticeable but close</td>
+            </tr>
+            <tr>
+              <td><span class="scale-range moderate">4.00 – 5.99</span></td>
+              <td>🟥</td>
+              <td>Moderate mismatch</td>
+            </tr>
+            <tr>
+              <td><span class="scale-range poor">2.00 – 3.99</span></td>
+              <td>🟫</td>
+              <td>Significant difference</td>
+            </tr>
+            <tr>
+              <td><span class="scale-range bad">0.00 – 1.99</span></td>
+              <td>⬛</td>
+              <td>Completely different color</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Footer ───────────────────────────────────────────────────────── -->
+    <footer id="score-footer">
+      <span>Colorle v1.2 · <a href="/">Play the game</a></span>
+    </footer>
+  </main>
+
+  <script type="module" src="/js/score-page.js"></script>
+</body>
+</html>

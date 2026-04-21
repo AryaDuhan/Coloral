@@ -3,6 +3,7 @@
   "outputDirectory": ".",
   "framework": null,
   "rewrites": [
+    { "source": "/score", "destination": "/score.html" },
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ]
 }
