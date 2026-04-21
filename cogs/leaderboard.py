@@ -7,7 +7,7 @@ import discord
 from datetime import datetime, timezone
 from discord import app_commands
 from discord.ext import commands
-from config import COLOR_PRIMARY, COLOR_WARNING
+from config import COLOR_PRIMARY, COLOR_WARNING, GAME_TZ
 
 log = logging.getLogger("dialed.leaderboard")
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
@@ -211,7 +211,7 @@ class LeaderboardCog(commands.Cog, name="Leaderboard"):
     @app_commands.command(name="leaderboard", description="Show the Dialed leaderboards (Daily / All-Time / Round Records).")
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
-        game = int(datetime.now(timezone.utc).strftime("%Y%m%d"))
+        game = int(datetime.now(GAME_TZ).strftime("%Y%m%d"))
         
         # If no scores for today yet, try the latest game in the DB
         rows = await self.bot.db.get_leaderboard(game, limit=1)

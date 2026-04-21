@@ -3,6 +3,7 @@ config.py — Bot-wide settings. Edit these or override via environment variable
 """
 
 import os
+from datetime import timezone, timedelta
 
 # ── Score Listener ────────────────────────────────────────────────────────────
 
@@ -22,6 +23,12 @@ REMINDER_CHANNEL_ID: int | None = int(os.getenv("REMINDER_CHANNEL_ID", "0")) or 
 # Default: 18:30 UTC = 12:00 AM IST (midnight Indian time)
 REMINDER_HOUR   = int(os.getenv("REMINDER_HOUR",   "18"))
 REMINDER_MINUTE = int(os.getenv("REMINDER_MINUTE", "30"))
+
+# ── Game Day Timezone ─────────────────────────────────────────────────────────
+# The "game day" boundary aligns with midnight in this timezone.
+# All game number calculations (YYYYMMDD) use this so that the daily
+# reminder, leaderboard reset, and game colors all change at midnight IST.
+GAME_TZ = timezone(timedelta(hours=5, minutes=30))  # IST (UTC+5:30)
 
 # ── Graph ─────────────────────────────────────────────────────────────────────
 

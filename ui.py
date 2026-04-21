@@ -12,14 +12,14 @@ import base64
 import json
 import time
 
-from config import HMAC_SECRET, WEBSITE_URL
+from config import HMAC_SECRET, WEBSITE_URL, GAME_TZ
 
 # No tracking sessions needed since game auto-submits
 
 
 def _today_game() -> int:
-    """Get today's game number (YYYYMMDD format, UTC)."""
-    return int(datetime.now(timezone.utc).strftime("%Y%m%d"))
+    """Get today's game number (YYYYMMDD format, game timezone)."""
+    return int(datetime.now(GAME_TZ).strftime("%Y%m%d"))
 
 
 def _today_str() -> str:

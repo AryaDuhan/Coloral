@@ -44,10 +44,11 @@ module.exports = async (req, res) => {
       return res.status(200).json({ scores: [] });
     }
 
-    // Check if the game is current (today UTC)
+    // Check if the game is current (today in game timezone = IST, UTC+5:30)
     const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
     const todayGame = parseInt(
-      `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`
+      `${istTime.getUTCFullYear()}${String(istTime.getUTCMonth() + 1).padStart(2, '0')}${String(istTime.getUTCDate()).padStart(2, '0')}`
     );
 
     if (data.game !== todayGame) {

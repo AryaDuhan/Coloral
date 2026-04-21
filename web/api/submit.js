@@ -61,9 +61,12 @@ module.exports = async (req, res) => {
   }
 
   // ── Build Score Data ─────────────────────────────────────────────────────
+  // Game day boundary = midnight IST (UTC+5:30). Offset UTC time so the
+  // date rolls over at 18:30 UTC instead of 00:00 UTC.
   const now = new Date();
+  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
   const gameNumber = parseInt(
-    `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`
+    `${istTime.getUTCFullYear()}${String(istTime.getUTCMonth() + 1).padStart(2, '0')}${String(istTime.getUTCDate()).padStart(2, '0')}`
   );
 
   const roundedTotal = parseFloat(totalScore.toFixed(2));
@@ -79,9 +82,9 @@ module.exports = async (req, res) => {
     })
     .join('');
 
-  // Date label
+  // Date label (use IST date to match game day)
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const dateLabel = `${months[now.getUTCMonth()]} ${now.getUTCDate()}`;
+  const dateLabel = `${months[istTime.getUTCMonth()]} ${istTime.getUTCDate()}`;
 
   // HMAC signature of score data for bot verification
   const scoreData = `${userId}:${gameNumber}:${roundedTotal}:${cheatCount}`;

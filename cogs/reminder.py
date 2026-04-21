@@ -21,6 +21,7 @@ from config import (
     COLOR_PRIMARY,
     COLOR_SUCCESS,
     COLOR_ERROR,
+    GAME_TZ,
 )
 from ui import PlayView
 
@@ -250,8 +251,8 @@ class ReminderCog(commands.Cog, name="Reminder"):
         if now < scheduled_today:
             return  # Not yet time today
 
-        # We're past the scheduled time. The "Dialed Day" is today's UTC date.
-        current_game_day_str = now.date().isoformat()
+        # We're past the scheduled time. The "Game Day" is based on GAME_TZ.
+        current_game_day_str = datetime.now(GAME_TZ).date().isoformat()
 
         # Check if we already sent for this Dialed Day
         last_sent = await self.bot.db.get_last_reminder_date()

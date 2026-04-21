@@ -25,12 +25,14 @@ function hashString(str) {
   return Math.abs(hash);
 }
 
-/** Format today's UTC date as YYYYMMDD string */
+/** Format today's IST date as YYYYMMDD string.
+ *  Game day boundary = midnight IST (UTC+5:30). */
 function todayStr() {
   const d = new Date();
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+  const yyyy = ist.getUTCFullYear();
+  const mm = String(ist.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(ist.getUTCDate()).padStart(2, '0');
   return `${yyyy}${mm}${dd}`;
 }
 
@@ -105,11 +107,12 @@ export function getDailyColors(dateOverride = null) {
 }
 
 /**
- * Format a date string like "Apr 13" from today's UTC date.
+ * Format a date string like "Apr 13" from today's IST date.
  * @returns {string}
  */
 export function todayLabel() {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const d = new Date();
-  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+  return `${months[ist.getUTCMonth()]} ${ist.getUTCDate()}`;
 }
