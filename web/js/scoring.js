@@ -193,9 +193,9 @@ export function scoreRound(target, guess) {
   const recovery = (10 - base) * hueAccuracy * recoverySatWeight * 0.25;
 
   // 3. Hue penalty — punish wrong hue on vivid colors
-  const huePenFactor = Math.max(0, (hDiff - 30) / 150);
+  const huePenFactor = Math.max(0, (hDiff - 25) / 100);
   const penaltySatWeight = Math.min(1, avgSat / 40);
-  const penalty = base * huePenFactor * penaltySatWeight * 0.15;
+  const penalty = base * huePenFactor * penaltySatWeight * 0.25;
 
   // Final score
   const score = base + recovery - penalty;
