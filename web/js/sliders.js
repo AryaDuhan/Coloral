@@ -38,6 +38,12 @@ export function createSliders(container, onChange) {
     const track = document.createElement('div');
     track.className = `slider-track ${cfg.className}`;
     track.dataset.key = cfg.key;
+    // Make track focusable for keyboard control
+    track.tabIndex = 0;
+    track.setAttribute('role', 'slider');
+    track.setAttribute('aria-label', cfg.label);
+    track.setAttribute('aria-valuemin', cfg.min);
+    track.setAttribute('aria-valuemax', cfg.max);
 
     const thumb = document.createElement('div');
     thumb.className = 'slider-thumb';
@@ -46,8 +52,15 @@ export function createSliders(container, onChange) {
     group.appendChild(track);
     container.appendChild(group);
 
-    els[cfg.key] = { track, thumb };
+    els[cfg.key] = { track, thumb, min: cfg.min, max: cfg.max };
   });
+
+  // ── ARIA value sync ────────────────────────────────────────────────────────
+  function updateAria() {
+    els.h.track.setAttribute('aria-valuenow', h);
+    els.s.track.setAttribute('aria-valuenow', s);
+    els.b.track.setAttribute('aria-valuenow', b);
+  }
 
   // ── Gradient Updates ───────────────────────────────────────────────────────
   function updateGradients() {
@@ -106,6 +119,32 @@ export function createSliders(container, onChange) {
       
       updateGradients();
       updateThumbs();
+      updateAria();
+      onChange(h, s, b);
+    }
+  }
+
+  // ── Arrow Key Logic ────────────────────────────────────────────────────────
+  // Adjusts the value for a given slider key by `delta` units, clamped to [min, max].
+  function adjustByKey(key, delta) {
+    let changed = false;
+
+    if (key === 'h') {
+      const n = Math.max(0, Math.min(360, h + delta));
+      if (h !== n) { h = n; changed = true; }
+    } else if (key === 's') {
+      const n = Math.max(0, Math.min(100, s + delta));
+      if (s !== n) { s = n; changed = true; }
+    } else {
+      const n = Math.max(0, Math.min(100, b + delta));
+      if (b !== n) { b = n; changed = true; }
+    }
+
+    if (changed) {
+      playSliderTick(0.6);
+      updateGradients();
+      updateThumbs();
+      updateAria();
       onChange(h, s, b);
     }
   }
@@ -118,6 +157,8 @@ export function createSliders(container, onChange) {
 
     const onDown = (e) => {
       dragging = true;
+      // Focus the track on click so arrow keys work immediately
+      track.focus();
       const y = e.touches ? e.touches[0].clientY : e.clientY;
       handleDrag(track, key, y);
     };
@@ -131,8 +172,30 @@ export function createSliders(container, onChange) {
 
     const onUp = () => { dragging = false; };
 
+    // ── Keyboard handler ───────────────────────────────────────────────────
+    const onKeyDown = (e) => {
+      // Shift multiplier: hold Shift for 10x step
+      const step = e.shiftKey ? 10 : 1;
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          e.preventDefault();
+          adjustByKey(key, step);
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          e.preventDefault();
+          adjustByKey(key, -step);
+          break;
+        default:
+          return; // let other keys propagate
+      }
+    };
+
     track.addEventListener('mousedown', onDown);
     track.addEventListener('touchstart', onDown, { passive: true });
+    track.addEventListener('keydown', onKeyDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('mouseup', onUp);
@@ -141,6 +204,7 @@ export function createSliders(container, onChange) {
     cleanups.push(() => {
       track.removeEventListener('mousedown', onDown);
       track.removeEventListener('touchstart', onDown);
+      track.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('mouseup', onUp);
@@ -150,6 +214,7 @@ export function createSliders(container, onChange) {
 
   // ── Initial render ─────────────────────────────────────────────────────────
   updateGradients();
+  updateAria();
   // Thumbs positioned after a RAF to ensure layout is ready
   requestAnimationFrame(() => {
     updateThumbs();
