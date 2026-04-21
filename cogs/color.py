@@ -25,8 +25,9 @@ class ColorCog(commands.Cog, name="Color"):
             title="🎨 Ready to play?",
             description=(
                 f"**{game_str}** awaits!\n\n"
-                "Click the button below to test your color memory. "
-                "Your score will be recorded automatically! 🏆"
+                "▶️ **Play Daily** — Today's shared colors. One shot.\n"
+                "🎲 **Play Single Player** — Random colors, unlimited plays.\n\n"
+                "Your daily score will be recorded automatically! 🏆"
             ),
             color=COLOR_PRIMARY,
         )

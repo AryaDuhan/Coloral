@@ -68,7 +68,6 @@ class PlayView(discord.ui.View):
 
         if HMAC_SECRET and WEBSITE_URL:
             token = _generate_token(user_id, username)
-            # Add cache-buster to the URL itself
             game_url = f"https://{WEBSITE_URL}/?token={token}&t={int(time.time())}"
 
             try:
@@ -90,4 +89,31 @@ class PlayView(discord.ui.View):
             except discord.errors.NotFound:
                 pass
 
+    @discord.ui.button(label="Play Single Player", style=discord.ButtonStyle.secondary, emoji="🎲", custom_id="play_singleplayer_btn")
+    async def singleplayer_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        username = interaction.user.display_name
+
+        if HMAC_SECRET and WEBSITE_URL:
+            token = _generate_token(user_id, username)
+            game_url = f"https://{WEBSITE_URL}/play?token={token}&t={int(time.time())}"
+
+            try:
+                await interaction.response.send_message(
+                    f"🎲 **Single Player Mode**\n\n"
+                    f"Open your game link:\n"
+                    f"**[Play Single Player]({game_url})**\n\n"
+                    f"*Random colors every game. Play as many times as you want!*",
+                    ephemeral=True,
+                )
+            except discord.errors.NotFound:
+                pass
+        else:
+            try:
+                await interaction.response.send_message(
+                    f"⚠️ The `HMAC_SECRET` and `WEBSITE_URL` environment variables are not configured.",
+                    ephemeral=True,
+                )
+            except discord.errors.NotFound:
+                pass
 

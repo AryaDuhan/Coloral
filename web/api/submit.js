@@ -21,7 +21,8 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  const { token, scores, totalScore, cheatEvents, isTest, roundData } = req.body;
+  const { token, scores, totalScore, cheatEvents, isTest, roundData, mode } = req.body;
+  const isSinglePlayer = mode === 'sp';
 
   if (!token || !scores || totalScore == null) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -61,13 +62,18 @@ module.exports = async (req, res) => {
   }
 
   // ── Build Score Data ─────────────────────────────────────────────────────
-  // Game day boundary = midnight IST (UTC+5:30). Offset UTC time so the
-  // date rolls over at 18:30 UTC instead of 00:00 UTC.
-  const now = new Date();
-  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-  const gameNumber = parseInt(
-    `${istTime.getUTCFullYear()}${String(istTime.getUTCMonth() + 1).padStart(2, '0')}${String(istTime.getUTCDate()).padStart(2, '0')}`
-  );
+  let gameNumber;
+  if (isSinglePlayer) {
+    // Single player: use timestamp as unique game ID
+    gameNumber = Date.now();
+  } else {
+    // Daily: game day boundary = midnight IST (UTC+5:30)
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    gameNumber = parseInt(
+      `${istTime.getUTCFullYear()}${String(istTime.getUTCMonth() + 1).padStart(2, '0')}${String(istTime.getUTCDate()).padStart(2, '0')}`
+    );
+  }
 
   const roundedTotal = parseFloat(totalScore.toFixed(2));
   const cheatCount = Array.isArray(cheatEvents) ? cheatEvents.length : 0;
@@ -82,9 +88,14 @@ module.exports = async (req, res) => {
     })
     .join('');
 
-  // Date label (use IST date to match game day)
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const dateLabel = `${months[istTime.getUTCMonth()]} ${istTime.getUTCDate()}`;
+  // Date label (use IST date to match game day — only used for daily)
+  let dateLabel = '';
+  if (!isSinglePlayer) {
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    dateLabel = `${months[istTime.getUTCMonth()]} ${istTime.getUTCDate()}`;
+  }
 
   // HMAC signature of score data for bot verification
   const scoreData = `${userId}:${gameNumber}:${roundedTotal}:${cheatCount}`;
@@ -106,11 +117,15 @@ module.exports = async (req, res) => {
   // The embed footer carries verification data for the bot to parse.
   const footerParts = [userId, gameNumber, roundedTotal, cheatCount, scoreSig];
   if (cheatDetails) footerParts.push(cheatDetails);
-  else if (roundData) footerParts.push(""); // pad if missing and we need to append more 
+  else if (roundData || isSinglePlayer) footerParts.push(""); // pad if missing and we need to append more 
   
-  if (roundData) footerParts.push(""); // pad the "TEST" spot to maintain the pipe delimited protocol
+  if (roundData || isSinglePlayer) footerParts.push(""); // pad the "TEST" spot to maintain the pipe delimited protocol
 
   if (roundData) footerParts.push(roundData);
+  else if (isSinglePlayer) footerParts.push("");
+
+  // Append SP flag so the bot knows this is a single player submission
+  if (isSinglePlayer) footerParts.push("SP");
 
   // Pick embed color based on score
   let embedColor = 0x6BCB77; // green
@@ -118,14 +133,16 @@ module.exports = async (req, res) => {
   else if (roundedTotal < 35) embedColor = 0xFFD166; // yellow
 
   const scoreBar = scores.map((s) => `\`${s.toFixed(1)}\``).join('  ');
-  const displayTitle = `🎨 ${username}`;
+  const displayTitle = isSinglePlayer ? `🎲 ${username}` : `🎨 ${username}`;
 
   const webhookPayload = {
     username: 'Colorle',
     embeds: [
       {
         title: displayTitle,
-        description: `**Dialed Daily** — ${dateLabel}\n**${roundedTotal}/50** ${emojis}\n\n${scoreBar}`,
+        description: isSinglePlayer
+          ? `**Single Player**\n**${roundedTotal}/50** ${emojis}\n\n${scoreBar}`
+          : `**Dialed Daily** — ${dateLabel}\n**${roundedTotal}/50** ${emojis}\n\n${scoreBar}`,
         color: embedColor,
         footer: {
           text: footerParts.join('|'),
@@ -147,9 +164,10 @@ module.exports = async (req, res) => {
       // Even if webhook fails, generate share link as fallback
     }
 
-    // ── Update Leaderboard Message ────────────────────────────────────────
-    // Uses a persistent webhook message (no embed) as a mini JSON "database"
-    await updateLeaderboardMessage(webhookUrl, gameNumber, username, roundedTotal);
+    // ── Update Leaderboard Message (daily only) ─────────────────────────
+    if (!isSinglePlayer) {
+      await updateLeaderboardMessage(webhookUrl, gameNumber, username, roundedTotal);
+    }
 
     // Generate tamper-proof share link
     const shareData = `${userId}:${gameNumber}:${roundedTotal}:${roundData || ''}`;

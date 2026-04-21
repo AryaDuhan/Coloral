@@ -63,11 +63,16 @@ export class GameEngine {
     this._rafId = null;
   }
 
-  /** Start a new daily game. */
-  start() {
-    const daily = getDailyColors();
-    this.dailyColors = daily.colors;
-    this.gameNumber = daily.gameNumber;
+  /** Start a new game. Pass colorsOverride for single player mode. */
+  start(colorsOverride = null) {
+    if (colorsOverride) {
+      this.dailyColors = colorsOverride.colors;
+      this.gameNumber = colorsOverride.gameNumber;
+    } else {
+      const daily = getDailyColors();
+      this.dailyColors = daily.colors;
+      this.gameNumber = daily.gameNumber;
+    }
     this.round = 0;
     this.scores = [];
     this.guesses = [];

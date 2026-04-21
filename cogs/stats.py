@@ -1,5 +1,5 @@
 """
-cogs/stats.py — /stats for daily mode.
+cogs/stats.py — /stats with paginated Daily + Single Player views.
 """
 
 import logging
@@ -11,43 +11,40 @@ from config import COLOR_PRIMARY, COLOR_WARNING, COLOR_SUCCESS
 
 log = logging.getLogger("dialed.stats")
 
+# Linear page order: 0 = Daily, 1 = Single Player
+PAGES = ["daily", "singleplayer"]
 
-class StatsCog(commands.Cog, name="Stats"):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
 
-    @app_commands.command(name="stats", description="View your Dialed daily stats.")
-    @app_commands.describe(player="Look up another player (defaults to you).")
-    async def stats(self, interaction: discord.Interaction, player: discord.Member | None = None):
-        target = player or interaction.user
-        
-        if target.bot:
-            embed = discord.Embed(
-                title="❌ Invalid Player",
-                description="Bots don't play Colorle!",
-                color=COLOR_WARNING,
-            )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
-            
-        await interaction.response.defer()
-        db = self.bot.db
+class StatsView(discord.ui.View):
+    def __init__(self, db, target: discord.Member):
+        super().__init__(timeout=180)
+        self.db = db
+        self.target = target
+        self.uid = str(target.id)
+        self.page = 0  # index into PAGES
 
-        s = await db.get_user_stats(str(target.id))
+    def _update_buttons(self):
+        """Enable/disable arrows based on current page position."""
+        self.btn_prev.disabled = (self.page == 0)
+        self.btn_next.disabled = (self.page == len(PAGES) - 1)
+
+    async def get_daily_embed(self) -> discord.Embed:
+        s = await self.db.get_user_stats(self.uid)
         if not s:
             embed = discord.Embed(
                 title="No Stats Yet",
-                description=f"**{target.display_name}** hasn't submitted any daily scores yet.\nClick **Play Daily** to get started! 🎨",
+                description=f"**{self.target.display_name}** hasn't submitted any daily scores yet.\nClick **Play Daily** to get started! 🎨",
                 color=COLOR_WARNING,
             )
-            await interaction.followup.send(embed=embed)
-            return
+            embed.set_footer(text="Page 1/2")
+            return embed
 
-        streak = await db.get_win_streak(str(target.id))
-        recent = await db.get_recent_scores(str(target.id), days=7)
+        streak = await self.db.get_win_streak(self.uid)
+        recent = await self.db.get_recent_scores(self.uid, days=7)
         label = _score_label(s["mean_score"])
 
-        embed = discord.Embed(title=f"🎨 Daily Stats — {target.display_name}", color=COLOR_PRIMARY)
-        embed.set_thumbnail(url=target.display_avatar.url)
+        embed = discord.Embed(title=f"🎨 Daily Stats — {self.target.display_name}", color=COLOR_PRIMARY)
+        embed.set_thumbnail(url=self.target.display_avatar.url)
 
         embed.add_field(name="🎮 Games Played",   value=f"`{s['games_played']}`",          inline=True)
         embed.add_field(name="🎯 Average",        value=f"`{s['mean_score']}/50`  {label}", inline=True)
@@ -69,9 +66,99 @@ class StatsCog(commands.Cog, name="Stats"):
             scores_fmt = "  ".join(f"`{r['score']}`" for r in recent[-7:])
             embed.add_field(name="📈 Recent (last 7)", value=f"{spark}\n{scores_fmt}", inline=False)
 
-        embed.set_footer(text="/leaderboard for today's rankings")
+        embed.set_footer(text="/leaderboard for today's rankings  •  Page 1/2")
         embed.timestamp = discord.utils.utcnow()
-        await interaction.followup.send(embed=embed)
+        return embed
+
+    async def get_sp_embed(self) -> discord.Embed:
+        s = await self.db.get_sp_user_stats(self.uid)
+        if not s:
+            embed = discord.Embed(
+                title="🎲 No Single Player Stats",
+                description=f"**{self.target.display_name}** hasn't played any single player games yet.\nUse `/color` and click **Play Single Player** to get started!",
+                color=COLOR_WARNING,
+            )
+            embed.set_footer(text="Page 2/2")
+            return embed
+
+        recent = await self.db.get_sp_recent_scores(self.uid, limit=7)
+        label = _score_label(s["mean_score"])
+
+        embed = discord.Embed(title=f"🎲 Single Player Stats — {self.target.display_name}", color=COLOR_PRIMARY)
+        embed.set_thumbnail(url=self.target.display_avatar.url)
+
+        embed.add_field(name="🎮 Games Played",  value=f"`{s['games_played']}`",          inline=True)
+        embed.add_field(name="🎯 Average",       value=f"`{s['mean_score']}/50`  {label}", inline=True)
+        embed.add_field(name="🏆 Personal Best", value=f"`{s['personal_best']}/50`",      inline=True)
+        embed.add_field(name="📉 Worst Score",   value=f"`{s['worst_score']}/50`",        inline=True)
+        embed.add_field(name="\u200b",           value="\u200b",                          inline=True)
+        embed.add_field(name="\u200b",           value="\u200b",                          inline=True)
+
+        # Individual round extremes (out of 10)
+        if s.get("best_round") is not None:
+            embed.add_field(name="🎯 Best Round",  value=f"`{s['best_round']}/10`",  inline=True)
+        if s.get("worst_round") is not None:
+            embed.add_field(name="💀 Worst Round", value=f"`{s['worst_round']}/10`", inline=True)
+        if s.get("best_round") is not None or s.get("worst_round") is not None:
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        if recent:
+            spark = _sparkline([r["score"] for r in recent])
+            scores_fmt = "  ".join(f"`{r['score']}`" for r in recent[-7:])
+            embed.add_field(name="📈 Recent (last 7)", value=f"{spark}\n{scores_fmt}", inline=False)
+
+        embed.set_footer(text="Unlimited practice mode  •  Page 2/2")
+        embed.timestamp = discord.utils.utcnow()
+        return embed
+
+    async def _get_embed(self) -> discord.Embed:
+        mode = PAGES[self.page]
+        if mode == "daily":
+            return await self.get_daily_embed()
+        else:
+            return await self.get_sp_embed()
+
+    async def update_view(self, interaction: discord.Interaction):
+        self._update_buttons()
+        embed = await self._get_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary, custom_id="stats_prev")
+    async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+        await self.update_view(interaction)
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary, custom_id="stats_next")
+    async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page < len(PAGES) - 1:
+            self.page += 1
+        await self.update_view(interaction)
+
+
+class StatsCog(commands.Cog, name="Stats"):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @app_commands.command(name="stats", description="View your Dialed stats (Daily + Single Player).")
+    @app_commands.describe(player="Look up another player (defaults to you).")
+    async def stats(self, interaction: discord.Interaction, player: discord.Member | None = None):
+        target = player or interaction.user
+        
+        if target.bot:
+            embed = discord.Embed(
+                title="❌ Invalid Player",
+                description="Bots don't play Colorle!",
+                color=COLOR_WARNING,
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        await interaction.response.defer()
+
+        view = StatsView(self.bot.db, target)
+        view._update_buttons()
+        embed = await view.get_daily_embed()
+        await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(
         name="cleartoday",

@@ -116,3 +116,53 @@ export function todayLabel() {
   const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
   return `${months[ist.getUTCMonth()]} ${ist.getUTCDate()}`;
 }
+
+/**
+ * Generate 5 random well-spaced HSB colors for single player mode.
+ * Uses Math.random() — different every play.
+ * Same quality constraints as daily colors.
+ *
+ * @returns {{ colors: Array<{h: number, s: number, b: number}>, gameNumber: number }}
+ */
+export function getRandomColors() {
+  let pdf = new Array(360).fill(1.0);
+
+  function decreaseProb(centerHue, sigma) {
+    for (let i = 0; i < 360; i++) {
+      let dist = Math.min(Math.abs(i - centerHue), 360 - Math.abs(i - centerHue));
+      let decline = Math.exp(- (dist * dist) / (2 * sigma * sigma));
+      pdf[i] -= decline;
+      if (pdf[i] < 0) pdf[i] = 0;
+    }
+  }
+
+  const colors = [];
+  for (let i = 0; i < 5; i++) {
+    let totalWeight = pdf.reduce((a, b) => a + b, 0);
+    if (totalWeight <= 0) {
+      pdf.fill(1.0);
+      totalWeight = 360;
+    }
+
+    let r = Math.random() * totalWeight;
+    let curr = 0;
+    let pickedHue = 0;
+    for (let j = 0; j < 360; j++) {
+      curr += pdf[j];
+      if (curr >= r) {
+        pickedHue = j;
+        break;
+      }
+    }
+
+    colors.push({
+      h: pickedHue,
+      s: Math.floor(Math.random() * 55) + 25,   // 25–80%
+      b: Math.floor(Math.random() * 55) + 25,   // 25–80%
+    });
+
+    decreaseProb(pickedHue, 30);
+  }
+
+  return { colors, gameNumber: Date.now() };
+}

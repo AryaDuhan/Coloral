@@ -146,7 +146,7 @@ class ScoresCog(commands.Cog, name="Scores"):
         if not message.author.name == COLORAL_WEBHOOK_NAME:
             return
 
-        # Parse footer: "userId|gameNumber|score|cheatCount|hmacSig|cheatDetails?"
+        # Parse footer: "userId|gameNumber|score|cheatCount|hmacSig|cheatDetails?|...|roundData?|SP?"
         if not embed.footer or not embed.footer.text:
             return
 
@@ -162,9 +162,10 @@ class ScoresCog(commands.Cog, name="Scores"):
             sig = parts[4]
             cheat_details = parts[5] if len(parts) > 5 else ""
             is_test = "TEST" in parts
+            is_single_player = "SP" in parts
             round_data = ""
             for p in parts[5:]:
-                if p and p != "TEST" and ":" not in p:
+                if p and p not in ("TEST", "SP") and ":" not in p:
                     round_data = p
                     break
         except (ValueError, IndexError):
@@ -180,16 +181,29 @@ class ScoresCog(commands.Cog, name="Scores"):
         if score <= 0 or score > 50:
             return
 
-        # Get username from embed title (format: "🎨 Username")
-        username = embed.title.replace("🎨 ", "").replace("🧪 [TEST] ", "").strip() if embed.title else f"User {user_id}"
+        # Get username from embed title (format: "🎨 Username" or "🎲 Username")
+        username = embed.title.replace("🎨 ", "").replace("🎲 ", "").replace("🧪 [TEST] ", "").strip() if embed.title else f"User {user_id}"
 
         db = self.bot.db
 
-        # ── Secret Anti-Cheat Alert (fires BEFORE duplicate check) ────────────
+        # ── Single Player Submission ─────────────────────────────────────────
+        if is_single_player:
+            await db.insert_sp_score(user_id, username, game_number, score, round_data)
+            log.info(f"{'[CATCHUP] ' if is_catchup else ''}[SP] Recorded: user={user_id} name={username} score={score}")
+            # Silently delete the webhook message — no bot reply needed
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                pass
+            return
+
+        # ── Daily Mode Submission (existing flow) ────────────────────────────
+
+        # Secret Anti-Cheat Alert (fires BEFORE duplicate check)
         if cheat_count > 0 and BOT_OWNER_ID:
             await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
 
-        # ── Normal Mode Submission ──
+        # Normal Mode Submission
         existing = await db.get_existing_score(user_id, game_number)
         if existing is not None:
             log.info(f"[COLORAL] Duplicate score for user={user_id} game={game_number}, already have {existing}")

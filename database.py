@@ -53,6 +53,20 @@ class Database:
         except aiosqlite.OperationalError:
             pass # Columns already exist
 
+        # Single player scores (no UNIQUE constraint — unlimited plays)
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS sp_scores (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      TEXT    NOT NULL,
+                username     TEXT    NOT NULL,
+                game_number  INTEGER NOT NULL,
+                score        REAL    NOT NULL,
+                round_data   TEXT    DEFAULT '',
+                submitted_at TEXT    NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        await self.db.execute("CREATE INDEX IF NOT EXISTS idx_sp_user ON sp_scores(user_id)")
+
         # Guild settings (reminder channel per server)
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS guild_settings (
@@ -410,3 +424,73 @@ class Database:
         # Sort by best_round descending
         result = sorted(player_data.values(), key=lambda x: x.get("best_round") or 0, reverse=True)
         return result[:limit]
+
+    # ── Single Player Scores ──────────────────────────────────────────────────
+
+    async def insert_sp_score(self, user_id: str, username: str, game_number: int, score: float, round_data: str = "") -> bool:
+        """Insert a single player score (always succeeds — no uniqueness constraint)."""
+        try:
+            await self.db.execute(
+                "INSERT INTO sp_scores (user_id, username, game_number, score, round_data) VALUES (?, ?, ?, ?, ?)",
+                (str(user_id), username, game_number, score, round_data),
+            )
+            await self.db.commit()
+            return True
+        except Exception as e:
+            log.error(f"Failed to insert SP score: {e}")
+            return False
+
+    async def get_sp_user_stats(self, user_id: str) -> Optional[dict]:
+        """Get aggregate single player stats for a user."""
+        async with self.db.execute(
+            """SELECT COUNT(*), AVG(score), MAX(score), MIN(score)
+               FROM sp_scores WHERE user_id = ?""",
+            (str(user_id),),
+        ) as cur:
+            row = await cur.fetchone()
+        if not row or row[0] == 0:
+            return None
+
+        best_round, worst_round = await self._get_sp_round_extremes(user_id=str(user_id))
+
+        return {
+            "games_played": row[0],
+            "mean_score": round(row[1], 2),
+            "personal_best": row[2],
+            "worst_score": row[3],
+            "best_round": best_round,
+            "worst_round": worst_round,
+        }
+
+    async def get_sp_recent_scores(self, user_id: str, limit: int = 7) -> list[dict]:
+        """Get recent single player scores for a user."""
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(
+            "SELECT game_number, score, submitted_at FROM sp_scores WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (str(user_id), limit),
+        ) as cur:
+            rows = await cur.fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+    async def _get_sp_round_extremes(self, user_id: str) -> tuple[float | None, float | None]:
+        """Get the best and worst individual round score from single player games."""
+        async with self.db.execute(
+            "SELECT round_data FROM sp_scores WHERE user_id = ? AND round_data != ''",
+            (str(user_id),),
+        ) as cur:
+            rows = await cur.fetchall()
+
+        best = None
+        worst = None
+        for row in rows:
+            scores = self._decode_round_data(row[0])
+            for s in scores:
+                if best is None or s > best:
+                    best = s
+                if worst is None or s < worst:
+                    worst = s
+
+        return (
+            round(best, 2) if best is not None else None,
+            round(worst, 2) if worst is not None else None,
+        )
