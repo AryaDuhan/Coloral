@@ -28,6 +28,38 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  // ── Input Validation & Anti-Tampering ────────────────────────────────────
+  if (typeof totalScore !== 'number' || totalScore < 0 || totalScore > 50) {
+    return res.status(400).json({ error: 'Invalid totalScore' });
+  }
+
+  if (!Array.isArray(scores) || scores.length !== 5) {
+    return res.status(400).json({ error: 'Invalid scores array' });
+  }
+
+  let calculatedSum = 0;
+  for (const s of scores) {
+    if (typeof s !== 'number' || s < 0 || s > 10) {
+      return res.status(400).json({ error: 'Invalid score value' });
+    }
+    calculatedSum += s;
+  }
+
+  // Verify totalScore matches the sum of round scores (allow minor float rounding differences)
+  if (Math.abs(calculatedSum - totalScore) > 0.05) {
+    return res.status(400).json({ error: 'Score mismatch tampering detected' });
+  }
+
+  if (cheatEvents && !Array.isArray(cheatEvents)) {
+    return res.status(400).json({ error: 'Invalid cheatEvents format' });
+  }
+  // Cap cheatEvents to prevent payload bloat from malicious clients
+  const safeCheatEvents = Array.isArray(cheatEvents) ? cheatEvents.slice(0, 50) : [];
+
+  if (roundData && (typeof roundData !== 'string' || roundData.length > 5000)) {
+    return res.status(400).json({ error: 'Invalid roundData format or size' });
+  }
+
   // ── Validate Token ───────────────────────────────────────────────────────
   const dotIdx = token.lastIndexOf('.');
   if (dotIdx === -1) {
@@ -76,7 +108,7 @@ module.exports = async (req, res) => {
   }
 
   const roundedTotal = parseFloat(totalScore.toFixed(2));
-  const cheatCount = Array.isArray(cheatEvents) ? cheatEvents.length : 0;
+  const cheatCount = safeCheatEvents.length;
 
   // Emoji bar
   const emojis = scores
@@ -108,7 +140,7 @@ module.exports = async (req, res) => {
   // ── Build Cheat Details (if any) ─────────────────────────────────────────
   let cheatDetails = '';
   if (cheatCount > 0) {
-    cheatDetails = cheatEvents
+    cheatDetails = safeCheatEvents
       .map((e) => `R${e.round}:${e.type}`)
       .join(',');
   }

@@ -6,6 +6,7 @@ import { initAntiCheat } from './anticheat.js';
 import { GameEngine } from './game.js';
 import { initAudio } from './audio.js';
 import { getDailyColors } from './colors.js';
+import { cacheScore, syncCachedScores } from './offline.js';
 
 const container = document.getElementById('phase-container');
 
@@ -191,9 +192,20 @@ async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, 
     }
   } catch (e) {
     if (statusEl) {
-      statusEl.textContent = '⚠ Network error — copy your score manually';
+      statusEl.textContent = '⚠ Network error — score cached and will submit when online';
       statusEl.className = 'results-status error';
     }
+    const { gameNumber } = getDailyColors();
+    cacheScore({
+      token,
+      roundScores,
+      totalScore: parseFloat(totalScore.toFixed(2)),
+      cheatEvents,
+      isTest,
+      roundData,
+      mode: 'daily',
+      gameNumber
+    });
   }
 }
 
@@ -202,6 +214,9 @@ async function submitScore(token, totalScore, roundScores, emojis, cheatEvents, 
 async function main() {
   // Initialize anti-cheat listeners (passive, invisible)
   initAntiCheat();
+  
+  // Sync any offline cached scores
+  syncCachedScores();
 
   // Authenticate via token in URL
   const auth = await authenticate();

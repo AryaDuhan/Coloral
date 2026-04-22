@@ -9,6 +9,7 @@ import { initAntiCheat } from './anticheat.js';
 import { GameEngine } from './game.js';
 import { initAudio } from './audio.js';
 import { getRandomColors } from './colors.js';
+import { cacheScore, syncCachedScores } from './offline.js';
 
 const container = document.getElementById('phase-container');
 
@@ -126,9 +127,19 @@ async function submitSPScore(token, totalScore, roundScores, emojis, cheatEvents
     }
   } catch (e) {
     if (statusEl) {
-      statusEl.textContent = '⚠ Network error';
+      statusEl.textContent = '⚠ Network error — score cached and will submit when online';
       statusEl.className = 'results-status error';
     }
+    cacheScore({
+      token,
+      roundScores,
+      totalScore: parseFloat(totalScore.toFixed(2)),
+      cheatEvents,
+      isTest: false,
+      roundData,
+      mode: 'sp',
+      gameNumber: Date.now()
+    });
   }
 }
 
@@ -136,6 +147,7 @@ async function submitSPScore(token, totalScore, roundScores, emojis, cheatEvents
 
 async function main() {
   initAntiCheat();
+  syncCachedScores();
 
   const auth = await authenticate();
   if (!auth) return;

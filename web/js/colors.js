@@ -61,16 +61,32 @@ export function getDailyColors(dateOverride = null) {
   // Penalize yesterday's hues to ensure completely different colors
   if (!dateOverride) {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 1);
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    ist.setUTCDate(ist.getUTCDate() - 1);
+    const yyyy = ist.getUTCFullYear();
+    const mm = String(ist.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(ist.getUTCDate()).padStart(2, '0');
     const yesterdayStr = `${yyyy}${mm}${dd}`;
     
     const yesterdayColors = getDailyColors(yesterdayStr).colors;
     for (const c of yesterdayColors) {
       decreaseProb(c.h, 45); // Spread yesterday's penalty wide
     }
+  }
+
+  // 5 distinct profiles for saturation and brightness to ensure variety
+  const profiles = [
+    { sMin: 70, sMax: 100, bMin: 70, bMax: 100 }, // Vivid & Bright
+    { sMin: 15, sMax: 40,  bMin: 75, bMax: 100 }, // Pastel / Light
+    { sMin: 60, sMax: 100, bMin: 20, bMax: 50 },  // Deep / Dark
+    { sMin: 15, sMax: 40,  bMin: 20, bMax: 50 },  // Dark & Desaturated
+    { sMin: 40, sMax: 70,  bMin: 40, bMax: 70 },  // Midtones
+  ];
+
+  // Shuffle the profiles using the deterministic rng
+  for (let i = profiles.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [profiles[i], profiles[j]] = [profiles[j], profiles[i]];
   }
 
   const colors = [];
@@ -93,10 +109,11 @@ export function getDailyColors(dateOverride = null) {
         }
     }
 
+    const p = profiles[i];
     colors.push({
       h: pickedHue,
-      s: Math.floor(rng() * 55) + 25,     // 25–80%
-      b: Math.floor(rng() * 55) + 25,     // 25–80%
+      s: Math.floor(rng() * (p.sMax - p.sMin + 1)) + p.sMin,
+      b: Math.floor(rng() * (p.bMax - p.bMin + 1)) + p.bMin,
     });
     
     // decrease probability of nearby color being chosen
@@ -136,6 +153,20 @@ export function getRandomColors() {
     }
   }
 
+  const profiles = [
+    { sMin: 70, sMax: 100, bMin: 70, bMax: 100 }, // Vivid & Bright
+    { sMin: 15, sMax: 40,  bMin: 75, bMax: 100 }, // Pastel / Light
+    { sMin: 60, sMax: 100, bMin: 20, bMax: 50 },  // Deep / Dark
+    { sMin: 15, sMax: 40,  bMin: 20, bMax: 50 },  // Dark & Desaturated
+    { sMin: 40, sMax: 70,  bMin: 40, bMax: 70 },  // Midtones
+  ];
+
+  // Shuffle profiles randomly
+  for (let i = profiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [profiles[i], profiles[j]] = [profiles[j], profiles[i]];
+  }
+
   const colors = [];
   for (let i = 0; i < 5; i++) {
     let totalWeight = pdf.reduce((a, b) => a + b, 0);
@@ -155,10 +186,11 @@ export function getRandomColors() {
       }
     }
 
+    const p = profiles[i];
     colors.push({
       h: pickedHue,
-      s: Math.floor(Math.random() * 55) + 25,   // 25–80%
-      b: Math.floor(Math.random() * 55) + 25,   // 25–80%
+      s: Math.floor(Math.random() * (p.sMax - p.sMin + 1)) + p.sMin,
+      b: Math.floor(Math.random() * (p.bMax - p.bMin + 1)) + p.bMin,
     });
 
     decreaseProb(pickedHue, 30);
