@@ -201,7 +201,7 @@ class ScoresCog(commands.Cog, name="Scores"):
 
         # Secret Anti-Cheat Alert (fires BEFORE duplicate check)
         if cheat_count > 0 and BOT_OWNER_ID:
-            await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details)
+            await self._send_cheat_alert(user_id, username, game_number, score, cheat_count, cheat_details, round_data)
 
         # Normal Mode Submission
         existing = await db.get_existing_score(user_id, game_number)
@@ -365,8 +365,8 @@ class ScoresCog(commands.Cog, name="Scores"):
             log.warning(f"Failed to parse share link: {e}")
 
 
-    async def _send_cheat_alert(self, user_id: str, username: str, game_number: int, score: float, cheat_count: int, cheat_details: str):
-        """Send a secret DM to the bot owner with grouped cheat breakdown."""
+    async def _send_cheat_alert(self, user_id: str, username: str, game_number: int, score: float, cheat_count: int, cheat_details: str, round_data_b64: str = ""):
+        """Send a secret DM to the bot owner with grouped cheat breakdown and timing data."""
         try:
             owner = await self.bot.fetch_user(BOT_OWNER_ID)
             if not owner:
@@ -400,13 +400,34 @@ class ScoresCog(commands.Cog, name="Scores"):
             else:
                 events_text = f"• {cheat_count} suspicious event(s) detected (no details available)"
 
+            times_text = ""
+            if round_data_b64:
+                try:
+                    b64 = round_data_b64.replace('-', '+').replace('_', '/')
+                    padding = 4 - (len(b64) % 4)
+                    if padding != 4:
+                        b64 += '=' * padding
+                    raw = base64.b64decode(b64)
+                    rounds_data = json.loads(raw)
+                    
+                    times = []
+                    for i, r in enumerate(rounds_data, start=1):
+                        tm = r.get("tm")
+                        if tm is not None:
+                            times.append(f"R{i}: {tm:.1f}s")
+                    
+                    if times:
+                        times_text = "\n\n**⏱️ Answer Times:**\n" + " | ".join(times)
+                except Exception as e:
+                    log.warning(f"Failed to parse times for cheat alert: {e}")
+
             embed = discord.Embed(
                 title="🕵️ Cheat Alert",
                 description=(
                     f"**{username}** (`{user_id}`) triggered **{cheat_count}** suspicious event{'s' if cheat_count > 1 else ''} "
                     f"during today's game.\n\n"
                     f"**Score:** {score}/50 • **Game:** #{game_number}\n\n"
-                    f"**Breakdown:**\n{events_text}"
+                    f"**Breakdown:**\n{events_text}{times_text}"
                 ),
                 color=0xFF6B6B,
             )

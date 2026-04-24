@@ -61,6 +61,14 @@ class StatsView(discord.ui.View):
         if s.get("best_round") is not None or s.get("worst_round") is not None:
             embed.add_field(name="\u200b", value="\u200b", inline=True)
 
+        # Timing Stats
+        if s.get("avg_time") is not None:
+            embed.add_field(
+                name="⏱️ Round Timing",
+                value=f"Avg: `{s['avg_time']}s` | Fast: `{s['fastest_time']}s` | Slow: `{s['slowest_time']}s`",
+                inline=False
+            )
+
         if recent:
             spark = _sparkline([r["score"] for r in recent])
             scores_fmt = "  ".join(f"`{r['score']}`" for r in recent[-7:])
@@ -101,6 +109,14 @@ class StatsView(discord.ui.View):
             embed.add_field(name="💀 Worst Round", value=f"`{s['worst_round']}/10`", inline=True)
         if s.get("best_round") is not None or s.get("worst_round") is not None:
             embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        # Timing Stats
+        if s.get("avg_time") is not None:
+            embed.add_field(
+                name="⏱️ Round Timing",
+                value=f"Avg: `{s['avg_time']}s` | Fast: `{s['fastest_time']}s` | Slow: `{s['slowest_time']}s`",
+                inline=False
+            )
 
         if recent:
             spark = _sparkline([r["score"] for r in recent])

@@ -1,13 +1,11 @@
 """
-cogs/lifecycle.py — Manages bot startup/shutdown messages and the 6-hour auto-restart.
+cogs/lifecycle.py — Manages bot startup/shutdown messages and admin commands.
 """
 
-import sys
-import os
 import asyncio
 import logging
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from datetime import datetime, timezone
 from config import COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, REMINDER_CHANNEL_ID, BOT_OWNER_ID, GAME_TZ
 
@@ -35,17 +33,9 @@ async def broadcast(bot, embed: discord.Embed):
             pass
 
 
-async def shutdown_and_restart(bot):
-    """Close the bot and replace the process."""
-    await bot.close()
-    # Exit cleanly at OS level with code 42 — phone_start.sh intercepts this to restart
-    os._exit(42)
-
-
 class LifecycleCog(commands.Cog, name="Lifecycle"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.auto_restart.start()
 
     async def send_online_message(self):
         """Send the startup announcement. Called from bot.py after cogs load."""
@@ -56,22 +46,6 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
             color=COLOR_SUCCESS,
         )
         await broadcast(self.bot, embed)
-
-    def cog_unload(self):
-        self.auto_restart.cancel()
-
-    @tasks.loop(hours=6)
-    async def auto_restart(self):
-        # Skip the immediate execution on startup
-        if self.auto_restart.current_loop == 0:
-            return
-
-        log.info("6-hour auto-restart triggered.")
-        await shutdown_and_restart(self.bot)
-
-    @auto_restart.before_loop
-    async def before_auto_restart(self):
-        await self.bot.wait_until_ready()
 
     # ── Owner-only commands ────────────────────────────────────────────────
 
@@ -84,7 +58,6 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         await interaction.response.send_message("🚭 Shutting down...", ephemeral=True)
         await asyncio.sleep(1)
         await self.bot.close()
-        os._exit(0)
 
     @discord.app_commands.command(
         name="admindeletescore",

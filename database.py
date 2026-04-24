@@ -238,8 +238,9 @@ class Database:
         if not row or row[0] == 0:
             return None
 
-        # Get best/worst individual round scores
+        # Get best/worst individual round scores and timing stats
         best_round, worst_round = await self._get_round_extremes(user_id=str(user_id))
+        avg_time, fastest_time, slowest_time = await self._get_time_extremes(user_id=str(user_id), is_sp=False)
 
         return {
             "games_played": row[0],
@@ -248,6 +249,9 @@ class Database:
             "worst_score": row[3],
             "best_round": best_round,
             "worst_round": worst_round,
+            "avg_time": avg_time,
+            "fastest_time": fastest_time,
+            "slowest_time": slowest_time,
         }
 
     async def get_recent_scores(self, user_id: str, days: int = 14) -> list[dict]:
@@ -361,6 +365,48 @@ class Database:
         except Exception:
             return []
 
+    @staticmethod
+    def _decode_round_times(round_data_b64: str) -> list[float]:
+        """Decode base64url round data into a list of round times (tm)."""
+        if not round_data_b64:
+            return []
+        try:
+            b64 = round_data_b64.replace('-', '+').replace('_', '/')
+            padding = 4 - (len(b64) % 4)
+            if padding != 4:
+                b64 += '=' * padding
+            raw = base64.b64decode(b64)
+            rounds = json.loads(raw)
+            if not isinstance(rounds, list):
+                return []
+            return [r.get("tm") for r in rounds if isinstance(r, dict) and r.get("tm") is not None]
+        except Exception:
+            return []
+
+    async def _get_time_extremes(self, user_id: str, is_sp: bool = False) -> tuple[float | None, float | None, float | None]:
+        """Get the average, fastest, and slowest individual round times for a user.
+        Returns (avg, fastest, slowest) as floats in seconds, or None if no time data exists."""
+        table = "sp_scores" if is_sp else "scores"
+        async with self.db.execute(
+            f"SELECT round_data FROM {table} WHERE user_id = ? AND round_data != ''",
+            (str(user_id),),
+        ) as cur:
+            rows = await cur.fetchall()
+
+        all_times = []
+        for row in rows:
+            times = self._decode_round_times(row[0])
+            all_times.extend(times)
+
+        if not all_times:
+            return None, None, None
+
+        avg_time = sum(all_times) / len(all_times)
+        fastest = min(all_times)
+        slowest = max(all_times)
+
+        return round(avg_time, 1), round(fastest, 1), round(slowest, 1)
+
     async def _get_round_extremes(self, user_id: str | None = None) -> tuple[float | None, float | None]:
         """Get the best and worst individual round score for a user (or all users if None).
         Returns (best_round, worst_round) as floats out of 10, or None if no round data exists."""
@@ -452,6 +498,7 @@ class Database:
             return None
 
         best_round, worst_round = await self._get_sp_round_extremes(user_id=str(user_id))
+        avg_time, fastest_time, slowest_time = await self._get_time_extremes(user_id=str(user_id), is_sp=True)
 
         return {
             "games_played": row[0],
@@ -460,6 +507,9 @@ class Database:
             "worst_score": row[3],
             "best_round": best_round,
             "worst_round": worst_round,
+            "avg_time": avg_time,
+            "fastest_time": fastest_time,
+            "slowest_time": slowest_time,
         }
 
     async def get_sp_recent_scores(self, user_id: str, limit: int = 7) -> list[dict]:

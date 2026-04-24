@@ -87,7 +87,27 @@ async def on_command_error(ctx, error):
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    import time
+
     token = os.getenv("DISCORD_TOKEN")
     if not token:
         raise ValueError("DISCORD_TOKEN not found in environment. Check your .env file.")
-    bot.run(token, log_handler=None)  # We handle logging ourselves
+
+    while True:
+        try:
+            log.info("Starting bot...")
+            bot.run(token, log_handler=None)  # We handle logging ourselves
+            # bot.run() returned normally → clean shutdown was requested
+            log.info("Bot shut down cleanly. Exiting.")
+            break
+        except KeyboardInterrupt:
+            log.info("Interrupted by user. Exiting.")
+            break
+        except Exception as e:
+            log.error(f"Bot crashed with error: {e}")
+            log.error(traceback.format_exc())
+            log.info("Restarting in 10 seconds...")
+            time.sleep(10)
+            # Recreate bot & db for a fresh connection
+            bot = DialedBot(command_prefix="!", intents=intents)
+            bot.db = Database("dialed.db")

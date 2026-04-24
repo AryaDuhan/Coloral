@@ -76,6 +76,7 @@ export class GameEngine {
     this.round = 0;
     this.scores = [];
     this.guesses = [];
+    this.times = [];
     this._nextRound();
   }
 
@@ -236,11 +237,15 @@ export class GameEngine {
     const init = this._sliderInstance.getValues();
     updatePreview(init.h, init.s, init.b);
 
+    const startTime = performance.now();
+
     submitBtn.addEventListener('click', () => {
+      const timeTaken = (performance.now() - startTime) / 1000;
       const guess = this._sliderInstance.getValues();
       this._sliderInstance.destroy();
       this._sliderInstance = null;
       this.guesses.push({ ...guess });
+      this.times.push(timeTaken);
       const score = scoreRound(target, guess);
       this.scores.push(score);
       this._showReveal(target, guess, score);
@@ -362,7 +367,8 @@ export class GameEngine {
     const roundDataObj = this.dailyColors.map((color, i) => ({
       t: [color.h, color.s, color.b],
       g: [this.guesses[i].h, this.guesses[i].s, this.guesses[i].b],
-      s: this.scores[i]
+      s: this.scores[i],
+      tm: this.times[i]
     }));
     
     // Convert to base64url so it safely passes through discord webhook
