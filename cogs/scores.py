@@ -425,6 +425,7 @@ class ScoresCog(commands.Cog, name="Scores"):
                 events_text = f"• {cheat_count} suspicious event(s) detected (no details available)"
 
             times_text = ""
+            colors_text = ""
             if round_data_b64:
                 try:
                     b64 = round_data_b64.replace('-', '+').replace('_', '/')
@@ -435,15 +436,23 @@ class ScoresCog(commands.Cog, name="Scores"):
                     rounds_data = json.loads(raw)
                     
                     times = []
+                    colors_lines = []
                     for i, r in enumerate(rounds_data, start=1):
                         tm = r.get("tm")
                         if tm is not None:
                             times.append(f"R{i}: {tm:.1f}s")
+                            
+                        t = r.get("t")
+                        g = r.get("g")
+                        if t and g:
+                            colors_lines.append(f"**R{i}** — Target: `H{t[0]} S{t[1]} B{t[2]}` | Guess: `H{g[0]} S{g[1]} B{g[2]}`")
                     
                     if times:
                         times_text = "\n\n**⏱️ Answer Times:**\n" + " | ".join(times)
+                    if colors_lines:
+                        colors_text = "\n\n**🎨 Color Choices:**\n" + "\n".join(colors_lines)
                 except Exception as e:
-                    log.warning(f"Failed to parse times for cheat alert: {e}")
+                    log.warning(f"Failed to parse times/colors for cheat alert: {e}")
 
             embed = discord.Embed(
                 title="🕵️ Cheat Alert",
@@ -451,7 +460,7 @@ class ScoresCog(commands.Cog, name="Scores"):
                     f"**{username}** (`{user_id}`) triggered **{cheat_count}** suspicious event{'s' if cheat_count > 1 else ''} "
                     f"during today's game.\n\n"
                     f"**Score:** {score}/50 • **Game:** #{game_number}\n\n"
-                    f"**Breakdown:**\n{events_text}{times_text}"
+                    f"**Breakdown:**\n{events_text}{times_text}{colors_text}"
                 ),
                 color=0xFF6B6B,
             )
