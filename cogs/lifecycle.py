@@ -4,12 +4,37 @@ cogs/lifecycle.py — Manages bot startup/shutdown messages and admin commands.
 
 import asyncio
 import logging
+import os
+import sys
 import discord
 from discord.ext import commands
 from datetime import datetime, timezone
 from config import COLOR_SUCCESS, COLOR_WARNING, COLOR_ERROR, REMINDER_CHANNEL_ID, BOT_OWNER_ID, GAME_TZ
 
 log = logging.getLogger("dialed.lifecycle")
+
+
+async def shutdown_and_restart(bot: commands.Bot):
+    """Gracefully shut down the bot and restart the process.
+
+    Broadcasts a restart notice, closes the bot, then replaces the
+    current process with a fresh Python invocation via os.execv.
+    """
+    embed = discord.Embed(
+        title="🔄 Restarting...",
+        description="The bot is restarting and will be back online shortly.",
+        color=COLOR_WARNING,
+    )
+    await broadcast(bot, embed)
+    await asyncio.sleep(1)
+
+    log.info("Shutting down for restart...")
+    await bot.close()
+
+    # Replace the current process with a fresh invocation
+    # This works on Linux/Termux where the bot runs via `python bot.py`
+    log.info("Execv restart: %s %s", sys.executable, sys.argv)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 async def broadcast(bot, embed: discord.Embed):

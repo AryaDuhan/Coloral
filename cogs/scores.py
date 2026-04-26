@@ -474,7 +474,7 @@ def _round_score_emoji(score: float) -> str:
     if score >= 9.5:
         return "🟢"  # Perfect / near-perfect
     if score >= 8.0:
-        return "🟢"  # Great
+        return "🔵"  # Great
     if score >= 6.0:
         return "🟡"  # Good
     if score >= 4.0:
