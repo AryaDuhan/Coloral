@@ -141,7 +141,7 @@ module.exports = async (req, res) => {
   let cheatDetails = '';
   if (cheatCount > 0) {
     cheatDetails = safeCheatEvents
-      .map((e) => `R${e.round}:${e.type}`)
+      .map((e) => `R${e.round}:${e.phase || 'memorize'}:${e.type}`)
       .join(',');
   }
 

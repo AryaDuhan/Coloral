@@ -69,6 +69,11 @@ CHEAT_LABELS = {
     "right_click": "🖱️ Right-click on game",
 }
 
+PHASE_LABELS = {
+    "memorize": "🔴 Memorize (viewing color)",
+    "guess": "🟡 Guess (recreating color)",
+}
+
 
 class ScoresCog(commands.Cog, name="Scores"):
     def __init__(self, bot: commands.Bot):
@@ -372,31 +377,50 @@ class ScoresCog(commands.Cog, name="Scores"):
             if not owner:
                 return
 
-            # Parse and group: "R2:print_screen,R4:window_blur,R4:print_screen"
-            # -> { "print_screen": [2, 4], "window_blur": [4] }
-            grouped: dict[str, list[int]] = {}
+            # Parse and group: "R2:memorize:print_screen,R4:guess:window_blur"
+            # Also supports legacy 2-part format: "R2:print_screen"
+            # -> { ("memorize", "print_screen"): [2], ("guess", "window_blur"): [4] }
+            grouped: dict[tuple[str, str], list[int]] = {}
             if cheat_details:
                 for event in cheat_details.split(","):
-                    parts = event.split(":", 1)
-                    if len(parts) == 2:
+                    parts = event.split(":", 2)
+                    if len(parts) == 3:
+                        # New format: R{round}:{phase}:{type}
                         try:
                             round_num = int(parts[0][1:])  # "R2" -> 2
                         except ValueError:
                             continue
+                        phase = parts[1]
+                        event_type = parts[2]
+                        grouped.setdefault((phase, event_type), []).append(round_num)
+                    elif len(parts) == 2:
+                        # Legacy format: R{round}:{type}
+                        try:
+                            round_num = int(parts[0][1:])
+                        except ValueError:
+                            continue
                         event_type = parts[1]
-                        grouped.setdefault(event_type, []).append(round_num)
+                        grouped.setdefault(("memorize", event_type), []).append(round_num)
 
             if grouped:
+                # Group by phase for cleaner display
+                phases_seen = sorted(set(phase for (phase, _) in grouped.keys()),
+                                     key=lambda p: 0 if p == "memorize" else 1)
                 event_lines = []
-                for event_type, rounds in grouped.items():
-                    label = CHEAT_LABELS.get(event_type, f"⚠️ {event_type}")
-                    rounds_str = ", ".join(str(r) for r in sorted(rounds))
-                    count = len(rounds)
-                    event_lines.append(
-                        f"{label}\n"
-                        f"  × **{count}** time{'s' if count > 1 else ''} — Rounds: **{rounds_str}**"
-                    )
-                events_text = "\n\n".join(event_lines)
+                for phase in phases_seen:
+                    phase_label = PHASE_LABELS.get(phase, f"❓ {phase}")
+                    event_lines.append(f"**{phase_label}**")
+                    for (p, event_type), rounds in grouped.items():
+                        if p != phase:
+                            continue
+                        label = CHEAT_LABELS.get(event_type, f"⚠️ {event_type}")
+                        rounds_str = ", ".join(str(r) for r in sorted(rounds))
+                        count = len(rounds)
+                        event_lines.append(
+                            f"  {label}\n"
+                            f"    × **{count}** time{'s' if count > 1 else ''} — Rounds: **{rounds_str}**"
+                        )
+                events_text = "\n".join(event_lines)
             else:
                 events_text = f"• {cheat_count} suspicious event(s) detected (no details available)"
 

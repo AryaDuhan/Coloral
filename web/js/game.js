@@ -1,7 +1,7 @@
 import { scoreRound, scoreEmoji, hsbToCss, getTextColor } from './scoring.js';
 import { getDailyColors, todayLabel } from './colors.js';
 import { createSliders } from './sliders.js';
-import { startMonitoring, stopMonitoring, getEvents } from './anticheat.js';
+import { startMonitoring, stopMonitoring, setPhaseGuess, getEvents, getScoreCap, getGlitchRounds, corruptGuess, commitReputation } from './anticheat.js';
 import { startTimerTick, stopTimerTick, startScoreTick, updateScoreTickRate, stopScoreTick, playDing, playCountdownAudio, playTimerEnd, stopCountdownAudio } from './audio.js';
 
 const ROUNDS = 5;
@@ -177,7 +177,7 @@ export class GameEngine {
         timerDecEl.textContent = '00';
         stopTimerTick(); // STOP the repeating mechanical watch clip
         playTimerEnd(); // beep when timer ends
-        stopMonitoring();
+        setPhaseGuess(); // Switch anti-cheat phase tag (monitoring stays active)
         this._startRecreate();
         return;
       }
@@ -240,13 +240,23 @@ export class GameEngine {
     const startTime = performance.now();
 
     submitBtn.addEventListener('click', () => {
+      stopMonitoring(); // Stop anti-cheat monitoring when guess is submitted
       const timeTaken = (performance.now() - startTime) / 1000;
-      const guess = this._sliderInstance.getValues();
+      let guess = this._sliderInstance.getValues();
       this._sliderInstance.destroy();
       this._sliderInstance = null;
+
+      // Silent guess corruption on glitched rounds
+      const glitched = getGlitchRounds();
+      if (glitched.includes(this.round + 1)) {
+        guess = corruptGuess(guess);
+      }
+
       this.guesses.push({ ...guess });
       this.times.push(timeTaken);
-      const score = scoreRound(target, guess);
+      let score = scoreRound(target, guess);
+      // Silent anti-cheat cap — player sees nothing
+      score = parseFloat(Math.min(score, getScoreCap()).toFixed(2));
       this.scores.push(score);
       this._showReveal(target, guess, score);
     });
@@ -363,6 +373,11 @@ export class GameEngine {
     const total = this.scores.reduce((a, b) => a + b, 0);
     const emojis = this.scores.map(scoreEmoji).join('');
     const cheatEvents = getEvents();
+
+    // Silently remember this cheater for future sessions
+    if (cheatEvents.length > 0) {
+      commitReputation();
+    }
 
     const roundDataObj = this.dailyColors.map((color, i) => ({
       t: [color.h, color.s, color.b],
