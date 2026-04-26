@@ -9,12 +9,29 @@
  *   3+ events   → flat 0.5/round cap (max 9.5)
  *   Reputation   → returning cheaters get subtler persistent caps
  *   Streak 3+   → guess corruption on last round(s)
+ *
+ * Robustness rules (to avoid false positives):
+ *   - window_blur during 'guess' phase is IGNORED (user may click sliders near edge)
+ *   - window_blur events are debounced (rapid blur/focus cycles from notifications)
+ *   - A blur must be SUSTAINED (>2s) during memorize to count
+ *   - Single right-clicks are ignored (only repeated ones flag)
+ *   - tab_hidden during guess phase is ignored
  */
 
 let _monitoring = false;
 let _currentRound = 0;
 let _currentPhase = 'memorize';
 const _events = [];
+
+// ── Blur tracking state ────────────────────────────────────────────────────
+let _blurStart = 0;          // timestamp when blur started (0 = not blurred)
+let _blurDebounce = 0;       // timestamp of last recorded blur (for debouncing)
+const _BLUR_MIN_DURATION = 2000;   // blur must last 2s+ to count during memorize
+const _BLUR_DEBOUNCE_MS = 3000;    // ignore rapid blur/focus cycles within 3s
+
+// ── Right-click tracking ───────────────────────────────────────────────────
+let _rightClickCount = 0;         // clicks per monitoring session
+const _RIGHTCLICK_THRESHOLD = 2;  // must right-click 2+ times to flag
 
 // ── Severity tiers (for 1-2 event penalty only) ────────────────────────────
 const _SEVERITY = {
@@ -91,14 +108,26 @@ export function startMonitoring(round) {
   _monitoring = true;
   _currentRound = round;
   _currentPhase = 'memorize';
+  _blurStart = 0;
+  _rightClickCount = 0;
 }
 
 export function setPhaseGuess() {
+  // If the user was blurred during memorize and timer expired,
+  // check if we should record it before switching phase
+  if (_blurStart > 0) {
+    const duration = Date.now() - _blurStart;
+    if (duration >= _BLUR_MIN_DURATION && _currentPhase === 'memorize') {
+      _recordIfNotDebounced('window_blur');
+    }
+    _blurStart = 0;
+  }
   _currentPhase = 'guess';
 }
 
 export function stopMonitoring() {
   _monitoring = false;
+  _blurStart = 0;
 }
 
 export function getEvents() {
@@ -186,10 +215,22 @@ function record(type) {
 }
 
 /**
+ * Record only if we haven't recently recorded a blur (debounce).
+ */
+function _recordIfNotDebounced(type) {
+  const now = Date.now();
+  if (now - _blurDebounce < _BLUR_DEBOUNCE_MS) return;
+  _blurDebounce = now;
+  record(type);
+}
+
+/**
  * Initialize all event listeners. Call once on page load.
  * Listeners are passive — they never preventDefault or give any visual hint.
  */
 export function initAntiCheat() {
+  // ── Keyboard shortcuts (screenshot tools) ──────────────────────────────
+  // These are always suspicious regardless of phase — immediately recorded.
   window.addEventListener('keydown', (e) => {
     if (!_monitoring) return;
     if (e.key === 'PrintScreen') record('print_screen');
@@ -198,11 +239,47 @@ export function initAntiCheat() {
     if (e.metaKey && e.shiftKey && (e.key === 'S' || e.key === 's')) record('win_shift_s');
   });
 
-  window.addEventListener('blur', () => { record('window_blur'); });
+  // ── Window blur (focus loss) ───────────────────────────────────────────
+  // Only suspicious during MEMORIZE phase (user is supposed to be staring
+  // at the color, so switching apps is fishy). During GUESS phase the user
+  // may accidentally click near the browser edge, get a notification, etc.
+  // Additionally, the blur must be SUSTAINED (≥2 seconds) — brief flickers
+  // from OS notifications, taskbar hover, etc. are harmless.
+  window.addEventListener('blur', () => {
+    if (!_monitoring) return;
+    // Only track during memorize — guess-phase blurs are harmless
+    if (_currentPhase !== 'memorize') return;
+    _blurStart = Date.now();
+  });
 
+  window.addEventListener('focus', () => {
+    if (!_monitoring) return;
+    if (_blurStart === 0) return;
+    const duration = Date.now() - _blurStart;
+    _blurStart = 0;
+    // Only flag if the blur lasted long enough to actually look something up
+    if (duration >= _BLUR_MIN_DURATION && _currentPhase === 'memorize') {
+      _recordIfNotDebounced('window_blur');
+    }
+  });
+
+  // ── Tab hidden (visibility change) ─────────────────────────────────────
+  // Like blur, only meaningful during memorize. Switching tabs during guess
+  // phase doesn't help cheating (color is already gone from screen).
   document.addEventListener('visibilitychange', () => {
+    if (!_monitoring) return;
+    if (_currentPhase !== 'memorize') return;
     if (document.hidden) record('tab_hidden');
   });
 
-  document.addEventListener('contextmenu', () => { record('right_click'); });
+  // ── Right-click ────────────────────────────────────────────────────────
+  // A single right-click can be accidental. Only flag if the user does it
+  // repeatedly (trying to inspect element / save image).
+  document.addEventListener('contextmenu', () => {
+    if (!_monitoring) return;
+    _rightClickCount++;
+    if (_rightClickCount >= _RIGHTCLICK_THRESHOLD) {
+      record('right_click');
+    }
+  });
 }

@@ -64,9 +64,9 @@ CHEAT_LABELS = {
     "ctrl_shift_s": "✂️ Ctrl+Shift+S pressed (Snipping Tool)",
     "win_shift_s": "✂️ Win+Shift+S pressed (Snip & Sketch)",
     "alt_print_screen": "🖨️ Alt+PrintScreen pressed",
-    "window_blur": "👁️ Window lost focus",
-    "tab_hidden": "👁️ Tab was hidden",
-    "right_click": "🖱️ Right-click on game",
+    "window_blur": "👁️ Sustained focus loss (2s+, memorize only)",
+    "tab_hidden": "👁️ Tab hidden (memorize only)",
+    "right_click": "🖱️ Repeated right-clicks (2+)",
 }
 
 PHASE_LABELS = {
