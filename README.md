@@ -2,6 +2,19 @@
 
 A Discord bot that tracks daily scores from [dialed.gg](https://dialed.gg), a color memory game. Players paste their daily results in chat and the bot automatically parses, records, and ranks them on a live leaderboard.
 
+## Screenshots
+
+<p align="center">
+  <img src="ss/Screenshot%202026-04-16%20050038.png" width="48%">
+  <img src="ss/Screenshot%202026-04-22%20010628.png" width="48%">
+  <img src="ss/Screenshot%202026-04-22%20013939.png" width="48%">
+  <img src="ss/Screenshot%202026-04-22%20015240.png" width="48%">
+  <img src="ss/Screenshot%202026-04-28%20182246.png" width="48%">
+  <img src="ss/Screenshot%202026-04-28%20182303.png" width="48%">
+  <img src="ss/Screenshot%202026-04-28%20182313.png" width="48%">
+  <img src="ss/Screenshot%202026-04-28%20182331.png" width="48%">
+</p>
+
 ## Features
 
 - **📅 Daily Score Tracking** — Paste your daily result and the bot records it instantly
