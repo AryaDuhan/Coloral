@@ -60,18 +60,18 @@ def _verify_share_signature(user_id: str, game_number: int, score: float, round_
 
 # ── Anti-cheat event labels ───────────────────────────────────────────────────
 CHEAT_LABELS = {
-    "print_screen": "🖨️ PrintScreen key pressed",
-    "ctrl_shift_s": "✂️ Ctrl+Shift+S pressed (Snipping Tool)",
-    "win_shift_s": "✂️ Win+Shift+S pressed (Snip & Sketch)",
-    "alt_print_screen": "🖨️ Alt+PrintScreen pressed",
-    "window_blur": "👁️ Sustained focus loss (2s+, memorize only)",
-    "tab_hidden": "👁️ Tab hidden (memorize only)",
-    "right_click": "🖱️ Repeated right-clicks (2+)",
+    "print_screen": "🖨️ Pressed PrintScreen",
+    "ctrl_shift_s": "✂️ Used Snipping Tool (Ctrl+Shift+S)",
+    "win_shift_s": "✂️ Used Snip & Sketch (Win+Shift+S)",
+    "alt_print_screen": "🖨️ Pressed Alt+PrintScreen",
+    "window_blur": "👁️ Clicked off the game window (2s+)",
+    "tab_hidden": "👁️ Switched browser tabs",
+    "right_click": "🖱️ Spamming right-clicks",
 }
 
 PHASE_LABELS = {
-    "memorize": "🔴 Memorize (viewing color)",
-    "guess": "🟡 Guess (recreating color)",
+    "memorize": "🔴 While memorizing the color",
+    "guess": "🟡 While guessing the color",
 }
 
 
