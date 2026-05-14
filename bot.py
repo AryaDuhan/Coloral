@@ -70,10 +70,7 @@ async def on_ready():
         )
     )
 
-    # Announce that the bot is online
-    lifecycle_cog = bot.get_cog("Lifecycle")
-    if lifecycle_cog:
-        await lifecycle_cog.send_online_message()
+
 
     log.info("Bot is ready!")
 

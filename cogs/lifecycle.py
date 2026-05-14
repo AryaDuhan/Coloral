@@ -62,15 +62,7 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def send_online_message(self):
-        """Send the startup announcement. Called from bot.py after cogs load."""
-        log.info("Announcing startup to channels...")
-        embed = discord.Embed(
-            title="🟢 Bot Online",
-            description="The Colorle bot has successfully started and is ready to track scores!",
-            color=COLOR_SUCCESS,
-        )
-        await broadcast(self.bot, embed)
+
 
     # ── Owner-only commands ────────────────────────────────────────────────
 
