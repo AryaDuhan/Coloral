@@ -184,6 +184,15 @@ class Database:
             row = await cur.fetchone()
         return dict(row) if row else None
 
+    async def get_all_user_scores(self, user_id: str):
+        self.db.row_factory = aiosqlite.Row
+        async with self.db.execute(
+            "SELECT game_number, score, round_data FROM scores WHERE user_id = ?",
+            (str(user_id),),
+        ) as cur:
+            rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
     async def get_leaderboard(self, game_number: int, limit: int = 10):
         self.db.row_factory = aiosqlite.Row
         async with self.db.execute(

@@ -90,56 +90,79 @@ class ScoresCog(commands.Cog, name="Scores"):
 
     @app_commands.command(
         name="unpenalize",
-        description="[Owner] Remove the cheating penalty from a user's score."
+        description="[Owner] Remove the cheating penalty from a user's score(s)."
     )
-    @app_commands.describe(user="The user to unpenalize", game_number="The game number (e.g. 20260514)")
+    @app_commands.describe(user="The user to unpenalize", game_number="Optional game number. If left blank, unpenalizes all games.")
     @app_commands.default_permissions(administrator=True)
-    async def unpenalize(self, interaction: discord.Interaction, user: discord.Member, game_number: int):
+    async def unpenalize(self, interaction: discord.Interaction, user: discord.Member, game_number: int | None = None):
         if interaction.user.id != BOT_OWNER_ID:
             await interaction.response.send_message("❌ You are not authorized to use this command.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        existing = await self.bot.db.get_existing_score(str(user.id), game_number)
-        if not existing:
-            await interaction.followup.send("❌ Score not found.", ephemeral=True)
-            return
-
-        round_data_b64 = existing.get("round_data")
-        if not round_data_b64:
-            await interaction.followup.send("❌ No round data found for this score.", ephemeral=True)
-            return
-
-        try:
-            b64 = round_data_b64.replace('-', '+').replace('_', '/')
-            padding = 4 - (len(b64) % 4)
-            if padding != 4:
-                b64 += '=' * padding
-            raw = base64.b64decode(b64)
-            rounds = json.loads(raw)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Error decoding round data: {e}", ephemeral=True)
-            return
-
-        new_total = 0.0
-        for r in rounds:
-            target = {"h": r["t"][0], "s": r["t"][1], "b": r["t"][2]}
-            guess = {"h": r["g"][0], "s": r["g"][1], "b": r["g"][2]}
-            new_s = score_round(target, guess)
-            r["s"] = new_s
-            new_total += new_s
-
-        new_total = round(new_total, 2)
-        
-        # re-encode round_data
-        new_round_data_b64 = base64.b64encode(json.dumps(rounds).encode()).decode().replace('+', '-').replace('/', '_').rstrip('=')
-
-        success = await self.bot.db.update_score(str(user.id), game_number, new_total, new_round_data_b64)
-        if success:
-            await interaction.followup.send(f"✅ Successfully unpenalized {user.display_name}. New score: {new_total}/50.", ephemeral=True)
+        if game_number is not None:
+            scores_to_process = []
+            existing = await self.bot.db.get_existing_score(str(user.id), game_number)
+            if existing:
+                existing["game_number"] = game_number
+                scores_to_process.append(existing)
         else:
-            await interaction.followup.send("❌ Failed to update score in the database.", ephemeral=True)
+            scores_to_process = await self.bot.db.get_all_user_scores(str(user.id))
+            
+        if not scores_to_process:
+            await interaction.followup.send("❌ No score(s) found for this user.", ephemeral=True)
+            return
+
+        success_count = 0
+        error_count = 0
+        last_new_total = 0.0
+
+        for score_data in scores_to_process:
+            gn = score_data["game_number"]
+            round_data_b64 = score_data.get("round_data")
+            if not round_data_b64:
+                error_count += 1
+                continue
+
+            try:
+                b64 = round_data_b64.replace('-', '+').replace('_', '/')
+                padding = 4 - (len(b64) % 4)
+                if padding != 4:
+                    b64 += '=' * padding
+                raw = base64.b64decode(b64)
+                rounds = json.loads(raw)
+            except Exception as e:
+                error_count += 1
+                continue
+
+            new_total = 0.0
+            for r in rounds:
+                target = {"h": r["t"][0], "s": r["t"][1], "b": r["t"][2]}
+                guess = {"h": r["g"][0], "s": r["g"][1], "b": r["g"][2]}
+                new_s = score_round(target, guess)
+                r["s"] = new_s
+                new_total += new_s
+
+            new_total = round(new_total, 2)
+            last_new_total = new_total
+            
+            # re-encode round_data
+            new_round_data_b64 = base64.b64encode(json.dumps(rounds).encode()).decode().replace('+', '-').replace('/', '_').rstrip('=')
+
+            success = await self.bot.db.update_score(str(user.id), gn, new_total, new_round_data_b64)
+            if success:
+                success_count += 1
+            else:
+                error_count += 1
+
+        if game_number is not None:
+            if success_count > 0:
+                await interaction.followup.send(f"✅ Successfully unpenalized {user.display_name}. New score: {last_new_total}/50.", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Failed to update score or no round data.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"✅ Successfully unpenalized {user.display_name} for {success_count} game(s). {error_count} failed/skipped.", ephemeral=True)
 
     async def _run_catchup(self):
         await self.bot.wait_until_ready()
