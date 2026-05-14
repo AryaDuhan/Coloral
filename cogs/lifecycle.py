@@ -75,6 +75,7 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
     # ── Owner-only commands ────────────────────────────────────────────────
 
     @discord.app_commands.command(name="shutdown", description="Shut down the bot completely (owner only).")
+    @discord.app_commands.default_permissions(administrator=True)
     async def shutdown_cmd(self, interaction: discord.Interaction):
         if str(interaction.user.id) != str(BOT_OWNER_ID):
             await interaction.response.send_message("❌ This command is restricted to the bot owner.", ephemeral=True)
@@ -92,6 +93,7 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         player="The user whose score to delete.",
         game_date="The date in YYYYMMDD format (e.g. 20260416). Defaults to today."
     )
+    @discord.app_commands.default_permissions(administrator=True)
     async def admin_delete_score(
         self,
         interaction: discord.Interaction,
@@ -132,6 +134,7 @@ class LifecycleCog(commands.Cog, name="Lifecycle"):
         score="The total score (e.g. 44.57).",
         game_date="The date in YYYYMMDD format (e.g. 20260417). Defaults to latest game or today."
     )
+    @discord.app_commands.default_permissions(administrator=True)
     async def admin_add_score(
         self,
         interaction: discord.Interaction,

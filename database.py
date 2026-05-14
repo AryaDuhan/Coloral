@@ -166,6 +166,15 @@ class Database:
         await self.db.commit()
         return success
 
+    async def update_score(self, user_id: str, game_number: int, score: float, round_data: str) -> bool:
+        async with self.db.execute(
+            "UPDATE scores SET score = ?, round_data = ? WHERE user_id = ? AND game_number = ?",
+            (score, round_data, str(user_id), game_number),
+        ) as cur:
+            success = cur.rowcount > 0
+        await self.db.commit()
+        return success
+
     async def get_existing_score(self, user_id: str, game_number: int):
         self.db.row_factory = aiosqlite.Row
         async with self.db.execute(
